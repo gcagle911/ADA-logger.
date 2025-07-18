@@ -54,7 +54,7 @@ def fetch_orderbook():
 
     volume = sum(float(b[1]) for b in bids[:20]) + sum(float(a[1]) for a in asks[:20])
     return {
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "asset": "BTC-USD",
         "exchange": "Coinbase",
         "price": mid_price,
@@ -169,7 +169,7 @@ def serve_json_file(date):
 
 @app.route("/output-latest.json")
 def serve_latest_output():
-    today = datetime.utcnow().date()
+    today = datetime.now(UTC).date()
     filename = f"output_{today}.json"
     file_path = os.path.join(DATA_FOLDER, filename)
     if os.path.exists(file_path):

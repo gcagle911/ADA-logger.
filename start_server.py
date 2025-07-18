@@ -28,7 +28,7 @@ def generate_sample_data(hours=48, interval_minutes=1):
     print(f"🔧 Generating {hours} hours of sample data...")
     
     # Create realistic sample data
-    start_time = datetime.utcnow() - timedelta(hours=hours)
+    start_time = datetime.now(datetime.UTC) - timedelta(hours=hours)
     data_points = []
     
     # Starting values
