@@ -1,4 +1,4 @@
-# BTC Logger - Enhanced for Historical Data Support
+# ADA Logger - Enhanced for Historical Data Support
 # Updated: 2025-07-10 - Added hybrid data endpoints and improved debugging
 
 from flask_cors import CORS
@@ -28,7 +28,7 @@ def get_current_csv_filename():
     return f"{date_str}_{block_label}.csv"
 
 def fetch_orderbook():
-    url = "https://api.exchange.coinbase.com/products/BTC-USD/book?level=2"
+    url = "https://api.exchange.coinbase.com/products/ADA-USD/book?level=2"
     response = requests.get(url)
     data = response.json()
 
@@ -54,8 +54,8 @@ def fetch_orderbook():
 
     volume = sum(float(b[1]) for b in bids[:20]) + sum(float(a[1]) for a in asks[:20])
     return {
-        "timestamp": datetime.utcnow().isoformat(),
-        "asset": "BTC-USD",
+        "timestamp": datetime.now(UTC).isoformat(),
+        "asset": "ADA-USD",
         "exchange": "Coinbase",
         "price": mid_price,
         "bid": best_bid,
@@ -98,9 +98,9 @@ def log_data():
 @app.route("/")
 def home():
     return {
-        "status": "✅ BTC Logger is running",
+        "status": "✅ ADA Logger is running",
         "last_log_time": last_logged["timestamp"],
-        "description": "TradingView-style BTC-USD data with hybrid loading system",
+        "description": "TradingView-style ADA-USD data with hybrid loading system",
         "endpoints": {
             "csv_data": [
                 "/data.csv - Current CSV file",
@@ -169,7 +169,7 @@ def serve_json_file(date):
 
 @app.route("/output-latest.json")
 def serve_latest_output():
-    today = datetime.utcnow().date()
+    today = datetime.now(UTC).date()
     filename = f"output_{today}.json"
     file_path = os.path.join(DATA_FOLDER, filename)
     if os.path.exists(file_path):
@@ -260,7 +260,7 @@ def debug_status():
     try:
         import glob
         status = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "data_folder": DATA_FOLDER,
             "files": {}
         }
@@ -272,7 +272,7 @@ def debug_status():
             file_path = os.path.join(DATA_FOLDER, filename)
             if os.path.exists(file_path):
                 file_time = datetime.fromtimestamp(os.path.getmtime(file_path))
-                age_hours = (datetime.utcnow() - file_time).total_seconds() / 3600
+                age_hours = (datetime.now(UTC) - file_time).total_seconds() / 3600
                 file_size = os.path.getsize(file_path)
                 
                 status["files"][filename] = {

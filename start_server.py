@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-BTC Chart Server Startup Script
+ADA Chart Server Startup Script
 ================================
 
-This script starts the BTC data logger server and provides utilities for testing.
+This script starts the ADA data logger server and provides utilities for testing.
 It includes sample data generation for development and testing purposes.
 """
 
@@ -12,7 +12,7 @@ import sys
 import json
 import time
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 import pandas as pd
 
 # Add current directory to path so we can import our modules
@@ -24,23 +24,23 @@ from process_data import process_csv_to_json
 DATA_FOLDER = "render_app/data"
 
 def generate_sample_data(hours=48, interval_minutes=1):
-    """Generate sample BTC data for testing the charts"""
+    """Generate sample ADA data for testing the charts"""
     print(f"🔧 Generating {hours} hours of sample data...")
     
     # Create realistic sample data
-    start_time = datetime.utcnow() - timedelta(hours=hours)
+    start_time = datetime.now(UTC) - timedelta(hours=hours)
     data_points = []
     
     # Starting values
-    base_price = 65000
+    base_price = 0.85
     base_spread = 0.0005
     
     for i in range(int(hours * 60 / interval_minutes)):
         timestamp = start_time + timedelta(minutes=i * interval_minutes)
         
         # Add some realistic price movement
-        price_change = (hash(str(timestamp)) % 2000 - 1000) / 100  # Random-ish price movement
-        price = base_price + price_change + (i * 0.1)  # Slight upward trend
+        price_change = (hash(str(timestamp)) % 200 - 100) / 10000  # Random-ish price movement for ADA
+        price = base_price + price_change + (i * 0.0001)  # Slight upward trend
         
         # Realistic spread data
         spread_base = base_spread + (hash(str(timestamp + timedelta(seconds=30))) % 100 - 50) / 1000000
@@ -48,7 +48,7 @@ def generate_sample_data(hours=48, interval_minutes=1):
         
         data_point = {
             "timestamp": timestamp.isoformat(),
-            "asset": "BTC-USD",
+            "asset": "ADA-USD",
             "exchange": "Coinbase",
             "price": round(price, 2),
             "bid": round(price - (price * spread_base / 2), 2),
@@ -153,14 +153,14 @@ def show_endpoints():
     port = int(os.environ.get('PORT', 10000))
     print(f"\n🔗 Base URL: http://localhost:{port}")
     print("📊 Chart Files:")
-    print("   • improved_btc_chart.html - New enhanced chart")
+    print("   • improved_ada_chart.html - New enhanced chart")
     print("   • tradingview_style_chart.html - TradingView style")
     print("   • chart_config_example.html - Basic example")
     print("="*60)
 
 def main():
     """Main startup function"""
-    print("🚀 BTC Chart Server Startup")
+    print("🚀 ADA Chart Server Startup")
     print("="*40)
     
     # Check if we have any data
@@ -189,7 +189,7 @@ def main():
     
     print("\n🎯 QUICK START:")
     print(f"1. Open http://localhost:{port} in your browser to see API status")
-    print("2. Open render_app/improved_btc_chart.html to view the enhanced chart")
+    print("2. Open render_app/improved_ada_chart.html to view the enhanced chart")
     print("3. The chart will auto-detect localhost and use the correct API endpoint")
     print("4. Data will update automatically every 30 seconds when auto-refresh is enabled")
     

@@ -1,0 +1,25 @@
+{
+  "generated_at": "2025-07-18T11:59:18.889759",
+  "total_records": 2890,
+  "date_range": {
+    "start": "2025-07-16T11:59:09.202580",
+    "end": "2025-07-18T11:59:18.645030"
+  },
+  "csv_files_processed": 7,
+  "assets": [
+    "BTC-USD"
+  ],
+  "exchanges": [
+    "Coinbase"
+  ],
+  "data_points": {
+    "price": "Mid price between bid/ask",
+    "bid": "Best bid price",
+    "ask": "Best ask price",
+    "spread": "Bid-ask spread",
+    "spread_pct": "Spread as percentage",
+    "volume": "Order book volume"
+  },
+  "update_frequency": "1 second",
+  "file_rotation": "8 hour blocks"
+}
