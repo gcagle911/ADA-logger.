@@ -260,7 +260,7 @@ def debug_status():
     try:
         import glob
         status = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "data_folder": DATA_FOLDER,
             "files": {}
         }
@@ -272,7 +272,7 @@ def debug_status():
             file_path = os.path.join(DATA_FOLDER, filename)
             if os.path.exists(file_path):
                 file_time = datetime.fromtimestamp(os.path.getmtime(file_path))
-                age_hours = (datetime.utcnow() - file_time).total_seconds() / 3600
+                age_hours = (datetime.now(UTC) - file_time).total_seconds() / 3600
                 file_size = os.path.getsize(file_path)
                 
                 status["files"][filename] = {
