@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 import glob
 
 DATA_FOLDER = "render_app/data"
@@ -36,8 +36,8 @@ def process_csv_to_json():
             try:
                 df = pd.read_csv(csv_file)
                 if not df.empty:
-                    # Ensure timestamp is datetime
-                    df['timestamp'] = pd.to_datetime(df['timestamp'])
+                    # Ensure timestamp is datetime with proper ISO8601 parsing
+                    df['timestamp'] = pd.to_datetime(df['timestamp'], format='ISO8601')
                     all_dataframes.append(df)
                     print(f"✅ Loaded {csv_file}: {len(df)} records")
             except Exception as e:
@@ -96,7 +96,7 @@ def _generate_recent_json(df):
     """Generate last 24 hours of data JSON for fast chart loading"""
     try:
         # Get last 24 hours
-        now = datetime.now(datetime.UTC)
+        now = datetime.now(UTC)
         cutoff_time = now - timedelta(hours=24)
         
         recent_df = df[df['timestamp'] >= cutoff_time].copy()
@@ -168,14 +168,14 @@ def _generate_metadata(df, csv_files):
     """Generate metadata about the dataset"""
     try:
         metadata = {
-            "generated_at": datetime.now(datetime.UTC).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "total_records": len(df),
             "date_range": {
                 "start": df['timestamp'].min().isoformat(),
                 "end": df['timestamp'].max().isoformat()
             },
             "csv_files_processed": len(csv_files),
-            "assets": ["BTC-USD"],
+            "assets": ["ADA-USD"],
             "exchanges": ["Coinbase"],
             "data_points": {
                 "price": "Mid price between bid/ask",
@@ -209,7 +209,7 @@ def _generate_index(csv_files):
         daily_files = [os.path.basename(f) for f in glob.glob(daily_pattern)]
         
         index_data = {
-            "generated_at": datetime.now(datetime.UTC).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "csv_sources": [os.path.basename(f) for f in csv_files],
             "daily_files": sorted(daily_files),
             "chart_files": [
