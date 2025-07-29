@@ -20,6 +20,7 @@ class CryptoLogger:
         self.config = get_crypto_config(self.crypto_symbol)
         self.last_logged = {"timestamp": None}
         self.data_folder = self.config["data_folder"]
+        self.last_json_update = {"recent": 0, "historical": 0}  # Track last JSON updates
         os.makedirs(self.data_folder, exist_ok=True)
         
     def get_current_csv_filename(self):
@@ -96,11 +97,78 @@ class CryptoLogger:
 
             self.last_logged["timestamp"] = data["timestamp"]
             print(f"[{data['timestamp']}] ✅ {self.crypto_symbol} logged to {filename}")
+            
+            # Only process JSON files at proper intervals
+            self.check_and_process_json()
             return True
             
         except Exception as e:
             print(f"🚨 Error logging {self.crypto_symbol}: {str(e)}")
             return False
+
+    def check_and_process_json(self):
+        """Check if JSON files need updating based on proper intervals"""
+        current_time = time.time()
+        
+        # Recent JSON: Update every 60 seconds (1 minute)
+        if current_time - self.last_json_update["recent"] >= 60:
+            self.process_recent_json()
+            self.last_json_update["recent"] = current_time
+            
+        # Historical JSON: Update every 3600 seconds (1 hour)  
+        if current_time - self.last_json_update["historical"] >= 3600:
+            self.process_historical_json()
+            self.last_json_update["historical"] = current_time
+
+    def process_recent_json(self):
+        """Generate recent.json file"""
+        try:
+            # Import here to avoid circular imports
+            import sys
+            import os
+            sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+            from process_data import process_csv_to_json
+            import process_data
+            
+            # Temporarily set DATA_FOLDER for this crypto's processing
+            original_folder = getattr(process_data, 'DATA_FOLDER', None)
+            process_data.DATA_FOLDER = self.data_folder
+            
+            # Process only recent data
+            process_csv_to_json()
+            print(f"📊 Updated recent.json for {self.crypto_symbol}")
+            
+            # Restore original folder
+            if original_folder:
+                process_data.DATA_FOLDER = original_folder
+                
+        except Exception as e:
+            print(f"❌ Error updating recent JSON for {self.crypto_symbol}: {e}")
+
+    def process_historical_json(self):
+        """Generate historical.json file"""
+        try:
+            # Import here to avoid circular imports
+            import sys
+            import os
+            sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+            from process_data import process_csv_to_json
+            import process_data
+            
+            # Temporarily set DATA_FOLDER for this crypto's processing
+            original_folder = getattr(process_data, 'DATA_FOLDER', None)
+            process_data.DATA_FOLDER = self.data_folder
+            
+            # Process full historical data  
+            process_csv_to_json()
+            print(f"🏛️ Updated historical.json for {self.crypto_symbol}")
+            
+            # Restore original folder
+            if original_folder:
+                process_data.DATA_FOLDER = original_folder
+                
+        except Exception as e:
+            print(f"❌ Error updating historical JSON for {self.crypto_symbol}: {e}")
 
     def log_data_continuous(self):
         """Continuous logging loop"""
@@ -141,7 +209,7 @@ def create_app(crypto_symbol):
                     "/output-latest.json - Latest daily JSON"
                 ],
                 "hybrid_chart_data": [
-                    "/recent.json - Last 24 hours (fast loading, updated every second)",
+                    "/recent.json - Last 24 hours (fast loading, updated every minute)",
                     "/historical.json - Complete dataset (full history, updated hourly)",
                     "/metadata.json - Dataset metadata",
                     "/index.json - Data source index"
