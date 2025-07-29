@@ -29,6 +29,9 @@ python3 multi_crypto_logger.py BTC
 
 # Run just ETH logger
 python3 multi_crypto_logger.py ETH
+
+# Run just XRP logger
+python3 multi_crypto_logger.py XRP
 ```
 
 ### Multiple Cryptocurrencies
@@ -37,7 +40,7 @@ python3 multi_crypto_logger.py ETH
 python3 launch_all_cryptos.py
 
 # Run specific cryptocurrencies
-python3 launch_all_cryptos.py ADA BTC ETH
+python3 launch_all_cryptos.py ADA BTC ETH XRP
 
 # Get help
 python3 launch_all_cryptos.py --help
@@ -52,6 +55,7 @@ python3 launch_all_cryptos.py --help
 | ETH    | ETH-USD  | 10002 | `render_app/data/eth`  | Coinbase   |
 | SOL    | SOL-USD  | 10003 | `render_app/data/sol`  | Coinbase   |
 | DOT    | DOT-USD  | 10004 | `render_app/data/dot`  | Coinbase   |
+| XRP    | XRP-USD  | 10005 | `render_app/data/xrp`  | Coinbase   |
 
 ## 🌐 API Endpoints
 
@@ -72,6 +76,12 @@ Each cryptocurrency runs on its own port with identical API structure:
 - **Status**: http://localhost:10002/
 - etc...
 
+### XRP (Port 10005)
+- **Status**: http://localhost:10005/
+- **Current CSV**: http://localhost:10005/data.csv
+- **CSV List**: http://localhost:10005/csv-list
+- **Status**: http://localhost:10005/status
+
 ## 📁 Data Organization
 
 ```
@@ -87,7 +97,9 @@ render_app/data/
 │   └── ...
 ├── sol/                    # SOL data
 │   └── ...
-└── dot/                    # DOT data
+├── dot/                    # DOT data
+│   └── ...
+└── xrp/                    # XRP data
     └── ...
 ```
 
@@ -148,6 +160,7 @@ python3 launch_all_cryptos.py ADA BTC  # Multiple cryptos
 curl http://localhost:10000/status  # ADA
 curl http://localhost:10001/status  # BTC  
 curl http://localhost:10002/status  # ETH
+curl http://localhost:10005/status  # XRP
 ```
 
 ### View Real-time Logs
@@ -156,6 +169,7 @@ When running `launch_all_cryptos.py`, you'll see logs from all cryptos:
 [ADA] ✅ ADA logged to render_app/data/ada/2025-07-18_08.csv
 [BTC] ✅ BTC logged to render_app/data/btc/2025-07-18_08.csv
 [ETH] ✅ ETH logged to render_app/data/eth/2025-07-18_08.csv
+[XRP] ✅ XRP logged to render_app/data/xrp/2025-07-18_08.csv
 ```
 
 ## 🎯 Use Cases
@@ -169,7 +183,7 @@ python3 multi_crypto_logger.py ADA
 ### Production Data Collection
 ```bash
 # Collect data from multiple cryptos 24/7
-python3 launch_all_cryptos.py ADA BTC ETH SOL DOT
+python3 launch_all_cryptos.py ADA BTC ETH SOL DOT XRP
 ```
 
 ### Selective Monitoring
@@ -193,7 +207,7 @@ pip3 install --break-system-packages flask flask-cors requests pandas
 
 ### Data Folder Permissions
 ```bash
-mkdir -p render_app/data/{ada,btc,eth,sol,dot}
+mkdir -p render_app/data/{ada,btc,eth,sol,dot,xrp}
 chmod 755 render_app/data/*
 ```
 
@@ -210,7 +224,7 @@ chmod 755 render_app/data/*
 ## 🔧 Next Steps
 
 1. **Start with ADA**: `python3 multi_crypto_logger.py ADA`
-2. **Add more cryptos**: `python3 launch_all_cryptos.py ADA BTC ETH`
+2. **Add more cryptos**: `python3 launch_all_cryptos.py ADA BTC ETH XRP`
 3. **Customize config**: Edit `config.py` to add your preferred cryptos
 4. **Build charts**: Each crypto has the same API endpoints for charting
 5. **Monitor & scale**: Add more cryptocurrencies as needed

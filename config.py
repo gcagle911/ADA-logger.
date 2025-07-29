@@ -56,6 +56,17 @@ CRYPTO_CONFIGS = {
         "price_increment": 0.005,
         "data_folder": "render_app/data/dot",
         "port": 10004
+    },
+    "XRP": {
+        "pair": "XRP-USD",
+        "exchange": "Coinbase",
+        "api_url": "https://api.exchange.coinbase.com/products/XRP-USD/book?level=2",
+        "base_price": 3.12,  # Based on current market price (Jan 2025)
+        "price_change_range": 300,  # Moderate volatility range for XRP
+        "price_change_divisor": 1000,  # Price movement scale
+        "price_increment": 0.002,  # Small upward trend increment
+        "data_folder": "render_app/data/xrp",
+        "port": 10005
     }
 }
 

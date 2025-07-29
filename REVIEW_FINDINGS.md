@@ -135,6 +135,7 @@ render_app/data/
 - **ETH** (Ethereum): Port 10002
 - **SOL** (Solana): Port 10003
 - **DOT** (Polkadot): Port 10004
+- **XRP** (Ripple): Port 10005
 
 ### Usage Examples
 ```bash
@@ -142,7 +143,7 @@ render_app/data/
 python3 multi_crypto_logger.py ADA
 
 # Multiple cryptocurrencies
-python3 launch_all_cryptos.py ADA BTC ETH
+python3 launch_all_cryptos.py ADA BTC ETH XRP
 
 # All cryptocurrencies
 python3 launch_all_cryptos.py
@@ -155,7 +156,8 @@ render_app/data/
 ├── btc/    # BTC data (Port 10001)
 ├── eth/    # ETH data (Port 10002)
 ├── sol/    # SOL data (Port 10003)
-└── dot/    # DOT data (Port 10004)
+├── dot/    # DOT data (Port 10004)
+└── xrp/    # XRP data (Port 10005)
 ```
 
 ## Conclusion 🎯
@@ -169,14 +171,14 @@ render_app/data/
 
 ### New Multi-Crypto Features:
 4. **BTC → ADA conversion** - ✅ Complete
-5. **Multi-crypto support** - ✅ 5 cryptocurrencies ready
+5. **Multi-crypto support** - ✅ 6 cryptocurrencies ready
 6. **Parallel data collection** - ✅ Independent loggers per crypto
 7. **Scalable architecture** - ✅ Easy to add more cryptos
 
 ### The system now successfully:
 - ✅ Logs live **Cardano (ADA)** market data (converted from BTC)
-- ✅ Supports **5 cryptocurrencies** simultaneously
-- ✅ Runs each crypto on **separate ports** (10000-10004)
+- ✅ Supports **6 cryptocurrencies** simultaneously  
+- ✅ Runs each crypto on **separate ports** (10000-10005)
 - ✅ Stores data in **organized folders** per cryptocurrency
 - ✅ Provides **identical APIs** for all cryptos
 - ✅ Handles **parallel data collection** robustly
