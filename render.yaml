@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: crypto-data-logger
+    env: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: python render_deploy.py
+    envVars:
+      - key: CRYPTO_SYMBOL
+        value: ADA  # Default to ADA, can be changed to BTC, ETH, SOL, DOT, XRP
+      # Alternative: Use CRYPTO_SYMBOLS for multiple cryptos
+      # - key: CRYPTO_SYMBOLS
+      #   value: ADA,BTC,ETH
+    healthCheckPath: /
+    autoDeploy: true
