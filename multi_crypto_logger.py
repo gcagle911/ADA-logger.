@@ -20,7 +20,7 @@ class CryptoLogger:
         self.config = get_crypto_config(self.crypto_symbol)
         self.last_logged = {"timestamp": None}
         self.data_folder = self.config["data_folder"]
-        self.last_json_update = {"recent": 0, "historical": 0}  # Track last JSON updates
+        self.last_json_update = {"recent": time.time(), "historical": time.time()}  # Track last JSON updates
         os.makedirs(self.data_folder, exist_ok=True)
         
     def get_current_csv_filename(self):
@@ -49,19 +49,19 @@ class CryptoLogger:
             mid_price = (best_bid + best_ask) / 2
             spread = best_ask - best_bid
 
-            # L20 average spread calculation
-            top_bids = [float(b[0]) for b in bids[:20]]
-            top_asks = [float(a[0]) for a in asks[:20]]
-            if len(top_bids) < 20 or len(top_asks) < 20:
-                spread_avg_L20 = spread
-                spread_avg_L20_pct = (spread / mid_price) * 100
+            # L5 average spread calculation (top 5 orderbook levels)
+            top_bids = [float(b[0]) for b in bids[:5]]
+            top_asks = [float(a[0]) for a in asks[:5]]
+            if len(top_bids) < 5 or len(top_asks) < 5:
+                spread_avg_L5 = spread
+                spread_avg_L5_pct = (spread / mid_price) * 100
             else:
-                bid_avg = sum(top_bids) / 20
-                ask_avg = sum(top_asks) / 20
-                spread_avg_L20 = ask_avg - bid_avg
-                spread_avg_L20_pct = (spread_avg_L20 / mid_price) * 100
+                bid_avg = sum(top_bids) / 5
+                ask_avg = sum(top_asks) / 5
+                spread_avg_L5 = ask_avg - bid_avg
+                spread_avg_L5_pct = (spread_avg_L5 / mid_price) * 100
 
-            volume = sum(float(b[1]) for b in bids[:20]) + sum(float(a[1]) for a in asks[:20])
+            volume = sum(float(b[1]) for b in bids[:5]) + sum(float(a[1]) for a in asks[:5])
             
             return {
                 "timestamp": datetime.now(UTC).isoformat(),
@@ -72,8 +72,8 @@ class CryptoLogger:
                 "ask": best_ask,
                 "spread": spread,
                 "volume": volume,
-                "spread_avg_L20": spread_avg_L20,
-                "spread_avg_L20_pct": spread_avg_L20_pct
+                "spread_avg_L5": spread_avg_L5,
+                "spread_avg_L5_pct": spread_avg_L5_pct
             }
         except Exception as e:
             print(f"❌ Error fetching {self.crypto_symbol} data: {e}")
@@ -117,6 +117,20 @@ class CryptoLogger:
             
         # Historical JSON: Update every 3600 seconds (1 hour)  
         if current_time - self.last_json_update["historical"] >= 3600:
+            self.process_historical_json()
+            self.last_json_update["historical"] = current_time
+            
+        # Force generation if files don't exist (for fresh deployments)
+        recent_file = os.path.join(self.data_folder, "recent.json")
+        historical_file = os.path.join(self.data_folder, "historical.json")
+        
+        if not os.path.exists(recent_file) and current_time - self.last_json_update["recent"] >= 10:
+            print(f"🔄 Force generating recent.json for {self.crypto_symbol}")
+            self.process_recent_json()
+            self.last_json_update["recent"] = current_time
+            
+        if not os.path.exists(historical_file) and current_time - self.last_json_update["historical"] >= 10:
+            print(f"🔄 Force generating historical.json for {self.crypto_symbol}")
             self.process_historical_json()
             self.last_json_update["historical"] = current_time
 
