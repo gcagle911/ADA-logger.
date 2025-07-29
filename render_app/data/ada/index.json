@@ -1,0 +1,19 @@
+{
+  "generated_at": "2025-07-29T16:17:39.191126+00:00",
+  "csv_sources": [
+    "2025-07-18_08.csv",
+    "2025-07-29_08.csv",
+    "2025-07-29_16.csv"
+  ],
+  "daily_files": [
+    "output_2025-07-29.json"
+  ],
+  "chart_files": [
+    "historical.json",
+    "recent.json"
+  ],
+  "metadata_files": [
+    "metadata.json",
+    "index.json"
+  ]
+}
