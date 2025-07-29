@@ -1,0 +1,15 @@
+{
+  "generated_at": "2025-07-29T14:54:23.415890+00:00",
+  "csv_sources": [
+    "2025-07-29_08.csv"
+  ],
+  "daily_files": [],
+  "chart_files": [
+    "historical.json",
+    "recent.json"
+  ],
+  "metadata_files": [
+    "metadata.json",
+    "index.json"
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "generated_at": "2025-07-29T14:54:23.415528+00:00",
+  "total_records": 26,
+  "date_range": {
+    "start": "2025-07-29T14:38:57.941515+00:00",
+    "end": "2025-07-29T14:54:23.410564+00:00"
+  },
+  "csv_files_processed": 1,
+  "assets": [
+    "ADA-USD"
+  ],
+  "exchanges": [
+    "Coinbase"
+  ],
+  "data_points": {
+    "price": "Mid price between bid/ask",
+    "bid": "Best bid price",
+    "ask": "Best ask price",
+    "spread": "Bid-ask spread",
+    "spread_pct": "Spread as percentage",
+    "volume": "Order book volume"
+  },
+  "update_frequency": "1 second",
+  "file_rotation": "8 hour blocks"
+}

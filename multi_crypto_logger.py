@@ -5,11 +5,13 @@ from flask_cors import CORS
 from flask import Flask, jsonify, send_file, send_from_directory, abort, request
 import requests
 import csv
+import json
 import time
 import os
 import threading
 from datetime import datetime, UTC
 from config import get_crypto_config, get_available_cryptos, get_crypto_from_port
+from process_data import process_csv_to_json
 import sys
 
 class CryptoLogger:
@@ -96,11 +98,32 @@ class CryptoLogger:
 
             self.last_logged["timestamp"] = data["timestamp"]
             print(f"[{data['timestamp']}] ✅ {self.crypto_symbol} logged to {filename}")
+            
+            # Process to JSON after every log entry for real-time updates
+            self.process_to_json()
             return True
             
         except Exception as e:
             print(f"🚨 Error logging {self.crypto_symbol}: {str(e)}")
             return False
+    
+    def process_to_json(self):
+        """Process CSV data to JSON files for this specific crypto"""
+        try:
+            # Temporarily change the global DATA_FOLDER for process_csv_to_json
+            import process_data
+            original_data_folder = getattr(process_data, 'DATA_FOLDER', None)
+            process_data.DATA_FOLDER = self.data_folder
+            
+            # Call the processing function
+            process_csv_to_json()
+            
+            # Restore original DATA_FOLDER
+            if original_data_folder:
+                process_data.DATA_FOLDER = original_data_folder
+                
+        except Exception as e:
+            print(f"⚠️ Error processing {self.crypto_symbol} to JSON: {e}")
 
     def log_data_continuous(self):
         """Continuous logging loop"""
@@ -192,6 +215,73 @@ def create_app(crypto_symbol):
             "data_folder": logger.data_folder,
             "port": config["port"]
         }
+    
+    # JSON Data Endpoints for plotting
+    @app.route("/recent.json")
+    def serve_recent_data():
+        """Serve last 24 hours of data for fast chart startup"""
+        file_path = os.path.join(logger.data_folder, "recent.json")
+        if os.path.exists(file_path):
+            return send_file(file_path, mimetype='application/json')
+        else:
+            return jsonify({"error": "Recent data not available"}), 404
+
+    @app.route("/historical.json")
+    def serve_historical_data():
+        """Serve complete historical dataset for full TradingView-style charts"""
+        file_path = os.path.join(logger.data_folder, "historical.json")
+        if os.path.exists(file_path):
+            return send_file(file_path, mimetype='application/json')
+        else:
+            return jsonify({"error": "Historical data not available"}), 404
+
+    @app.route("/metadata.json")
+    def serve_metadata():
+        """Serve metadata about the dataset"""
+        file_path = os.path.join(logger.data_folder, "metadata.json")
+        if os.path.exists(file_path):
+            return send_file(file_path, mimetype='application/json')
+        else:
+            return jsonify({"error": "Metadata not available"}), 404
+
+    @app.route("/index.json")
+    def serve_index():
+        """Serve index of available data files"""
+        file_path = os.path.join(logger.data_folder, "index.json")
+        if os.path.exists(file_path):
+            return send_file(file_path, mimetype='application/json')
+        else:
+            return jsonify({"error": "Index not available"}), 404
+
+    @app.route("/chart-data")
+    def serve_chart_data():
+        """Serve optimized data for charting with query parameters"""
+        from flask import request
+        try:
+            # Check if historical data exists and try to process it
+            historical_file = os.path.join(logger.data_folder, "historical.json")
+            if not os.path.exists(historical_file):
+                return jsonify({"error": "Historical data not available"}), 404
+            
+            # Get query parameters
+            limit = request.args.get('limit', type=int)
+            start_date = request.args.get('start_date')
+            end_date = request.args.get('end_date')
+            
+            # Read and filter data
+            with open(historical_file, 'r') as f:
+                data = json.load(f)
+            
+            if start_date:
+                data = [d for d in data if d.get('time', d.get('timestamp', '')) >= start_date]
+            if end_date:
+                data = [d for d in data if d.get('time', d.get('timestamp', '')) <= end_date]
+            if limit:
+                data = data[-limit:]  # Get most recent data points
+            
+            return jsonify(data)
+        except Exception as e:
+            return jsonify({"error": f"Error processing chart data: {str(e)}"}), 500
     
     # Store logger in app for access by background thread
     app.crypto_logger = logger
