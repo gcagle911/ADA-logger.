@@ -36,7 +36,7 @@ This repository contains a **Bitcoin/BTC data logger** (not Cardano as mentioned
 - ✅ `/debug-status` - System status information
 
 ### 5. **Data Quality**
-- ✅ **Rich Market Data**: Price, bid, ask, spread, volume, L20 averages
+- ✅ **Rich Market Data**: Price, bid, ask, spread, volume, L5 averages
 - ✅ **Timestamp Consistency**: ISO format timestamps throughout
 - ✅ **Data Validation**: Proper error handling for malformed data
 

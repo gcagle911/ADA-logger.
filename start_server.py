@@ -55,8 +55,8 @@ def generate_sample_data(hours=48, interval_minutes=1):
             "ask": round(price + (price * spread_base / 2), 2),
             "spread": round(price * spread_base, 2),
             "volume": 50 + (hash(str(timestamp)) % 100),  # Random volume
-            "spread_avg_L20": round(price * spread_base, 6),
-            "spread_avg_L20_pct": round(spread_pct, 8)
+                            "spread_avg_L5": round(price * spread_base, 6),
+                "spread_avg_L5_pct": round(spread_pct, 8)
         }
         data_points.append(data_point)
     

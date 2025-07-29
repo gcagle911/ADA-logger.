@@ -79,7 +79,7 @@ def _generate_historical_json(df):
                 "bid": round(float(row['bid']), 2),
                 "ask": round(float(row['ask']), 2),
                 "spread": round(float(row['spread']), 4),
-                "spread_pct": round(float(row['spread_avg_L20_pct']), 6),
+                "spread_pct": round(float(row['spread_avg_L5_pct']), 6),
                 "volume": round(float(row['volume']), 2)
             })
         
@@ -110,7 +110,7 @@ def _generate_recent_json(df):
                 "bid": round(float(row['bid']), 2),
                 "ask": round(float(row['ask']), 2),
                 "spread": round(float(row['spread']), 4),
-                "spread_pct": round(float(row['spread_avg_L20_pct']), 6),
+                "spread_pct": round(float(row['spread_avg_L5_pct']), 6),
                 "volume": round(float(row['volume']), 2)
             })
         
@@ -136,7 +136,7 @@ def _generate_daily_json_files(df):
                 'bid': 'last', 
                 'ask': 'last',
                 'spread': 'mean',
-                'spread_avg_L20_pct': 'mean',
+                'spread_avg_L5_pct': 'mean',
                 'volume': 'sum'
             }).ffill().dropna()
             
@@ -149,7 +149,7 @@ def _generate_daily_json_files(df):
                     "bid": round(float(row['bid']), 2),
                     "ask": round(float(row['ask']), 2),
                     "spread": round(float(row['spread']), 4),
-                    "spread_pct": round(float(row['spread_avg_L20_pct']), 6),
+                    "spread_pct": round(float(row['spread_avg_L5_pct']), 6),
                     "volume": round(float(row['volume']), 2)
                 })
             
