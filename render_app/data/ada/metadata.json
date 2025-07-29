@@ -1,11 +1,11 @@
 {
-  "generated_at": "2025-07-29T16:17:39.190819+00:00",
-  "total_records": 22,
+  "generated_at": "2025-07-29T16:27:57.158462+00:00",
+  "total_records": 159,
   "date_range": {
     "start": "2025-07-18T12:06:08.775714+00:00",
-    "end": "2025-07-29T16:17:39.177222+00:00"
+    "end": "2025-07-29T16:27:57.136270+00:00"
   },
-  "csv_files_processed": 3,
+  "csv_files_processed": 2,
   "assets": [
     "ADA-USD"
   ],
