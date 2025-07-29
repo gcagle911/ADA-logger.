@@ -261,6 +261,66 @@ def create_app(crypto_symbol):
             "port": config["port"]
         }
     
+    # JSON Data Endpoints for plotting
+    @app.route("/recent.json")
+    def serve_recent_data():
+        """Serve last 24 hours of data for fast chart startup"""
+        file_path = os.path.join(logger.data_folder, "recent.json")
+        abs_path = os.path.abspath(file_path)
+        print(f"🔍 Looking for recent.json at: {abs_path}")
+        print(f"✅ File exists: {os.path.exists(abs_path)}")
+        if os.path.exists(abs_path):
+            return send_file(abs_path, mimetype='application/json')
+        else:
+            return jsonify({"error": f"Recent data not available at {abs_path}"}), 404
+
+    @app.route("/historical.json")
+    def serve_historical_data():
+        """Serve complete historical dataset for full TradingView-style charts"""
+        file_path = os.path.join(logger.data_folder, "historical.json")
+        abs_path = os.path.abspath(file_path)
+        print(f"🔍 Looking for historical.json at: {abs_path}")
+        print(f"📂 Current working directory: {os.getcwd()}")
+        print(f"📁 Data folder: {logger.data_folder}")
+        print(f"✅ File exists: {os.path.exists(abs_path)}")
+        if os.path.exists(abs_path):
+            return send_file(abs_path, mimetype='application/json')
+        else:
+            return jsonify({"error": f"Historical data not available at {abs_path}"}), 404
+
+    @app.route("/metadata.json")
+    def serve_metadata():
+        """Serve metadata about the dataset"""
+        file_path = os.path.join(logger.data_folder, "metadata.json")
+        if os.path.exists(file_path):
+            return send_file(file_path, mimetype='application/json')
+        else:
+            return jsonify({"error": "Metadata not available"}), 404
+
+    @app.route("/index.json")
+    def serve_index():
+        """Serve index of available data files"""
+        file_path = os.path.join(logger.data_folder, "index.json")
+        if os.path.exists(file_path):
+            return send_file(file_path, mimetype='application/json')
+        else:
+            return jsonify({"error": "Index not available"}), 404
+
+    @app.route("/generate-json")
+    def generate_json_now():
+        """Manually trigger JSON generation (for fresh deployments)"""
+        try:
+            logger.process_recent_json()
+            logger.process_historical_json()
+            return jsonify({
+                "status": "✅ JSON files generated successfully",
+                "recent_json": f"/recent.json",
+                "historical_json": f"/historical.json",
+                "note": "This is a one-time manual trigger. Normal updates happen automatically."
+            })
+        except Exception as e:
+            return jsonify({"error": f"❌ Error generating JSON: {e}"}), 500
+    
     # Store logger in app for access by background thread
     app.crypto_logger = logger
     return app
