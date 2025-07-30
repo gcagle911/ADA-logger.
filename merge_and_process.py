@@ -39,14 +39,14 @@ def process_all_csvs():
 
         # STEP 3: Downsample to 1-minute
         ohlc = full_df["price"].resample("1min").ohlc()
-        spread_mean = full_df["spread_avg_L20_pct"].resample("1min").mean()
+        spread_mean = full_df["spread_avg_L5_pct"].resample("1min").mean()
 
-        result = pd.concat([ohlc, spread_mean.rename("spread_avg_L20_pct")], axis=1)
+        result = pd.concat([ohlc, spread_mean.rename("spread_avg_L5_pct")], axis=1)
 
         # STEP 4: Add MAs
-        result["ma50"] = result["spread_avg_L20_pct"].rolling(50).mean()
-        result["ma100"] = result["spread_avg_L20_pct"].rolling(100).mean()
-        result["ma200"] = result["spread_avg_L20_pct"].rolling(200).mean()
+        result["ma50"] = result["spread_avg_L5_pct"].rolling(50).mean()
+        result["ma100"] = result["spread_avg_L5_pct"].rolling(100).mean()
+        result["ma200"] = result["spread_avg_L5_pct"].rolling(200).mean()
 
         result.dropna(inplace=True)
         result.reset_index(inplace=True)

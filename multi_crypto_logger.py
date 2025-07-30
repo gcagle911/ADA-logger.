@@ -110,27 +110,31 @@ class CryptoLogger:
         """Check if JSON files need updating based on proper intervals"""
         current_time = time.time()
         
-        # Recent JSON: Update every 60 seconds (1 minute)
-        if current_time - self.last_json_update["recent"] >= 60:
-            self.process_recent_json()
-            self.last_json_update["recent"] = current_time
-            
-        # Historical JSON: Update every 3600 seconds (1 hour)  
-        if current_time - self.last_json_update["historical"] >= 3600:
-            self.process_historical_json()
-            self.last_json_update["historical"] = current_time
-            
-        # Force generation if files don't exist (for fresh deployments)
+        # Force generation if files don't exist (for fresh deployments) - ONLY ONCE
         recent_file = os.path.join(self.data_folder, "recent.json")
         historical_file = os.path.join(self.data_folder, "historical.json")
         
-        if not os.path.exists(recent_file) and current_time - self.last_json_update["recent"] >= 10:
-            print(f"🔄 Force generating recent.json for {self.crypto_symbol}")
+        if not os.path.exists(recent_file):
+            print(f"🔄 Force generating missing recent.json for {self.crypto_symbol}")
+            self.process_recent_json()
+            self.last_json_update["recent"] = current_time
+            return  # Exit early to avoid double processing
+            
+        if not os.path.exists(historical_file):
+            print(f"🔄 Force generating missing historical.json for {self.crypto_symbol}")
+            self.process_historical_json()
+            self.last_json_update["historical"] = current_time
+            return  # Exit early to avoid double processing
+        
+        # Recent JSON: Update every 60 seconds (1 minute) - STRICT TIMING
+        if current_time - self.last_json_update["recent"] >= 60:
+            print(f"📊 Updating recent.json for {self.crypto_symbol} (60 second interval)")
             self.process_recent_json()
             self.last_json_update["recent"] = current_time
             
-        if not os.path.exists(historical_file) and current_time - self.last_json_update["historical"] >= 10:
-            print(f"🔄 Force generating historical.json for {self.crypto_symbol}")
+        # Historical JSON: Update every 3600 seconds (1 hour) - STRICT TIMING
+        if current_time - self.last_json_update["historical"] >= 3600:
+            print(f"🏛️ Updating historical.json for {self.crypto_symbol} (1 hour interval)")
             self.process_historical_json()
             self.last_json_update["historical"] = current_time
 
@@ -322,18 +326,36 @@ def create_app(crypto_symbol):
 
     @app.route("/generate-json")
     def generate_json_now():
-        """Manually trigger JSON generation (for fresh deployments)"""
+        """Manually trigger JSON generation and reset timing (for fresh deployments)"""
         try:
+            print(f"🔧 Manual JSON generation triggered for {crypto_symbol}")
+            
+            # Reset timing to ensure fresh generation
+            current_time = time.time()
+            logger.last_json_update = {"recent": 0, "historical": 0}
+            
+            # Force generate both files
             logger.process_recent_json()
             logger.process_historical_json()
+            
+            # Reset timing properly for future automatic updates
+            logger.last_json_update = {"recent": current_time, "historical": current_time}
+            
             return jsonify({
-                "status": "✅ JSON files generated successfully",
-                "recent_json": f"/recent.json",
-                "historical_json": f"/historical.json",
-                "note": "This is a one-time manual trigger. Normal updates happen automatically."
+                "status": "✅ JSON files generated successfully with L5 data",
+                "recent_json": "/recent.json",
+                "historical_json": "/historical.json", 
+                "crypto": crypto_symbol,
+                "timestamp": datetime.now(UTC).isoformat(),
+                "note": "Manual generation complete. Automatic updates: recent=1min, historical=1hour"
             })
         except Exception as e:
-            return jsonify({"error": f"❌ Error generating JSON: {e}"}), 500
+            import traceback
+            return jsonify({
+                "error": f"❌ Error generating JSON: {e}", 
+                "traceback": traceback.format_exc(),
+                "crypto": crypto_symbol
+            }), 500
     
     # Store logger in app for access by background thread
     app.crypto_logger = logger

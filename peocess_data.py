@@ -71,20 +71,20 @@ def resample_and_calculate_mas(df):
     # Resample to 1-minute intervals
     df_1min = df_indexed.resample("1min").agg({
         "price": "last",
-        "spread_avg_L20_pct": "mean"
+        "spread_avg_L5_pct": "mean"
     }).dropna()
     
     print(f"📊 Resampled to {len(df_1min)} 1-minute intervals")
     
     # Calculate moving averages with full historical context
-    df_1min["ma_50"] = df_1min["spread_avg_L20_pct"].rolling(window=50, min_periods=1).mean()
-    df_1min["ma_100"] = df_1min["spread_avg_L20_pct"].rolling(window=100, min_periods=1).mean()
-    df_1min["ma_200"] = df_1min["spread_avg_L20_pct"].rolling(window=200, min_periods=1).mean()
+    df_1min["ma_50"] = df_1min["spread_avg_L5_pct"].rolling(window=50, min_periods=1).mean()
+    df_1min["ma_100"] = df_1min["spread_avg_L5_pct"].rolling(window=100, min_periods=1).mean()
+    df_1min["ma_200"] = df_1min["spread_avg_L5_pct"].rolling(window=200, min_periods=1).mean()
     
     # Add data quality indicators
-    df_1min["ma_50_valid"] = df_1min["spread_avg_L20_pct"].rolling(window=50).count() >= 50
-    df_1min["ma_100_valid"] = df_1min["spread_avg_L20_pct"].rolling(window=100).count() >= 100
-    df_1min["ma_200_valid"] = df_1min["spread_avg_L20_pct"].rolling(window=200).count() >= 200
+    df_1min["ma_50_valid"] = df_1min["spread_avg_L5_pct"].rolling(window=50).count() >= 50
+    df_1min["ma_100_valid"] = df_1min["spread_avg_L5_pct"].rolling(window=100).count() >= 100
+    df_1min["ma_200_valid"] = df_1min["spread_avg_L5_pct"].rolling(window=200).count() >= 200
     
     df_1min.reset_index(inplace=True)
     df_1min.rename(columns={"timestamp": "time"}, inplace=True)
@@ -292,12 +292,12 @@ def process_today_only():
     df.set_index("timestamp", inplace=True)
     df_1min = df.resample("1min").agg({
         "price": "last",
-        "spread_avg_L20_pct": "mean"
+        "spread_avg_L5_pct": "mean"
     }).dropna()
     
-    df_1min["ma_50"] = df_1min["spread_avg_L20_pct"].rolling(window=50).mean()
-    df_1min["ma_100"] = df_1min["spread_avg_L20_pct"].rolling(window=100).mean()
-    df_1min["ma_200"] = df_1min["spread_avg_L20_pct"].rolling(window=200).mean()
+    df_1min["ma_50"] = df_1min["spread_avg_L5_pct"].rolling(window=50).mean()
+    df_1min["ma_100"] = df_1min["spread_avg_L5_pct"].rolling(window=100).mean()
+    df_1min["ma_200"] = df_1min["spread_avg_L5_pct"].rolling(window=200).mean()
     
     df_1min.reset_index(inplace=True)
     df_1min.rename(columns={"timestamp": "time"}, inplace=True)
