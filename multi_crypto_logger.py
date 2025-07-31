@@ -197,9 +197,9 @@ class CryptoLogger:
             
             json_counter += 1
             
-            # Update recent.json every 5 minutes (300 seconds)
-            if json_counter % 300 == 0:
-                print(f"📊 5-minute interval - updating recent.json for {self.crypto_symbol}")
+            # Update recent.json every 1 minute (60 seconds)
+            if json_counter % 60 == 0:
+                print(f"📊 1-minute interval - updating recent.json for {self.crypto_symbol}")
                 try:
                     self.process_recent_json()
                 except Exception as e:
@@ -368,7 +368,7 @@ def create_app(crypto_symbol):
                 "crypto": crypto_symbol,
                 "timestamp": datetime.now(UTC).isoformat(),
                 "timing": {
-                    "recent_json": "Updates automatically every 5 minutes (300 seconds)",
+                    "recent_json": "Updates automatically every 1 minute (60 seconds)",
                     "historical_json": "Updates automatically every 10 minutes (600 seconds)"
                 },
                 "note": "Manual generation complete. Automatic updates use counter-based timing."
