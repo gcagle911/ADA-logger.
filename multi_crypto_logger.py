@@ -205,9 +205,9 @@ class CryptoLogger:
                 except Exception as e:
                     print(f"❌ Error updating recent.json: {e}")
             
-            # Update historical.json every 1 hour (3600 seconds) 
-            if json_counter % 3600 == 0:
-                print(f"🏛️ 1-hour interval - updating historical.json for {self.crypto_symbol}")
+            # Update historical.json every 10 minutes (600 seconds) 
+            if json_counter % 600 == 0:
+                print(f"🏛️ 10-minute interval - updating historical.json for {self.crypto_symbol}")
                 try:
                     self.process_historical_json()
                 except Exception as e:
@@ -369,7 +369,7 @@ def create_app(crypto_symbol):
                 "timestamp": datetime.now(UTC).isoformat(),
                 "timing": {
                     "recent_json": "Updates automatically every 5 minutes (300 seconds)",
-                    "historical_json": "Updates automatically every 1 hour (3600 seconds)"
+                    "historical_json": "Updates automatically every 10 minutes (600 seconds)"
                 },
                 "note": "Manual generation complete. Automatic updates use counter-based timing."
             })
