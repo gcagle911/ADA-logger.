@@ -188,26 +188,24 @@ class CryptoLogger:
             print(f"❌ Error updating historical JSON for {self.crypto_symbol}: {e}")
 
     def log_data_continuous(self):
-        """Continuous logging loop"""
-        json_counter = 0  # Counter to track seconds for JSON timing
+        """Continuous logging loop with simple JSON timing"""
+        json_counter = 0  # Simple counter for JSON generation
         
         while True:
             start_time = time.time()
             self.log_data_once()
             
-            # Increment counter every second
             json_counter += 1
             
-            # Generate recent.json every 60 seconds (1 minute)
-            if json_counter % 60 == 0:
-                print(f"📊 60-second interval reached - updating recent.json for {self.crypto_symbol}")
-                self.process_recent_json()
-                
-            # Generate historical.json every 3600 seconds (1 hour)  
-            if json_counter % 3600 == 0:
-                print(f"🏛️ 1-hour interval reached - updating historical.json for {self.crypto_symbol}")
-                self.process_historical_json()
-                json_counter = 0  # Reset counter to prevent overflow
+            # Update JSON files every 5 minutes (300 seconds) - SIMPLE AND RELIABLE
+            if json_counter % 300 == 0:
+                print(f"📊 5-minute interval - updating JSON files for {self.crypto_symbol}")
+                try:
+                    self.process_recent_json()
+                    self.process_historical_json()
+                except Exception as e:
+                    print(f"❌ Error updating JSON files: {e}")
+                json_counter = 0  # Reset to prevent overflow
             
             elapsed = time.time() - start_time
             sleep_time = max(0, 1.0 - elapsed)

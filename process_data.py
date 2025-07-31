@@ -68,13 +68,27 @@ def process_csv_to_json():
         raise
 
 def _generate_historical_json(df):
-    """Generate complete historical data JSON"""
+    """Generate complete historical data JSON - RESAMPLED TO 1-MINUTE INTERVALS"""
     try:
+        # CRITICAL FIX: Resample to 1-minute intervals instead of using every second
+        df_copy = df.copy()
+        df_copy.set_index('timestamp', inplace=True)
+        
+        # Resample to 1-minute OHLC for price, last values for bid/ask, mean for spreads, sum for volume
+        resampled = df_copy.resample('1min').agg({
+            'price': 'last',           # Use last price in the minute
+            'bid': 'last',             # Use last bid in the minute  
+            'ask': 'last',             # Use last ask in the minute
+            'spread': 'mean',          # Average spread over the minute
+            'spread_avg_L5_pct': 'mean',  # Average L5 spread percentage
+            'volume': 'sum'            # Sum volume over the minute
+        }).dropna()
+        
         # Convert to chart format
         chart_data = []
-        for _, row in df.iterrows():
+        for timestamp, row in resampled.iterrows():
             chart_data.append({
-                "time": row['timestamp'].isoformat(),
+                "time": timestamp.isoformat(),
                 "price": round(float(row['price']), 2),
                 "bid": round(float(row['bid']), 2),
                 "ask": round(float(row['ask']), 2),
@@ -93,7 +107,7 @@ def _generate_historical_json(df):
         print(f"❌ Error generating historical.json: {e}")
 
 def _generate_recent_json(df):
-    """Generate last 24 hours of data JSON for fast chart loading"""
+    """Generate last 24 hours of data JSON - RESAMPLED TO 1-MINUTE INTERVALS"""
     try:
         # Get last 24 hours
         now = datetime.now(UTC)
@@ -101,11 +115,24 @@ def _generate_recent_json(df):
         
         recent_df = df[df['timestamp'] >= cutoff_time].copy()
         
+        # CRITICAL FIX: Resample to 1-minute intervals instead of using every second
+        recent_df.set_index('timestamp', inplace=True)
+        
+        # Resample to 1-minute intervals
+        resampled = recent_df.resample('1min').agg({
+            'price': 'last',           # Use last price in the minute
+            'bid': 'last',             # Use last bid in the minute  
+            'ask': 'last',             # Use last ask in the minute
+            'spread': 'mean',          # Average spread over the minute
+            'spread_avg_L5_pct': 'mean',  # Average L5 spread percentage
+            'volume': 'sum'            # Sum volume over the minute
+        }).dropna()
+        
         # Convert to chart format
         chart_data = []
-        for _, row in recent_df.iterrows():
+        for timestamp, row in resampled.iterrows():
             chart_data.append({
-                "time": row['timestamp'].isoformat(),
+                "time": timestamp.isoformat(),
                 "price": round(float(row['price']), 2),
                 "bid": round(float(row['bid']), 2),
                 "ask": round(float(row['ask']), 2),
