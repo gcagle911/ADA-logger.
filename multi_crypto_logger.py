@@ -187,8 +187,42 @@ class CryptoLogger:
         except Exception as e:
             print(f"❌ Error updating historical JSON for {self.crypto_symbol}: {e}")
 
+    def cleanup_old_csv_files(self, keep_days=7):
+        """Remove CSV files older than keep_days to prevent disk space issues"""
+        try:
+            import glob
+            from pathlib import Path
+            
+            # Get all CSV files in the data folder
+            csv_pattern = os.path.join(self.data_folder, "*.csv")
+            csv_files = glob.glob(csv_pattern)
+            
+            # Current time for comparison
+            now = datetime.now(UTC)
+            cutoff_time = now - timedelta(days=keep_days)
+            
+            deleted_count = 0
+            for csv_file in csv_files:
+                try:
+                    # Get file modification time
+                    file_mtime = datetime.fromtimestamp(os.path.getmtime(csv_file), tz=UTC)
+                    
+                    if file_mtime < cutoff_time:
+                        os.remove(csv_file)
+                        deleted_count += 1
+                        print(f"🗑️ Deleted old CSV: {os.path.basename(csv_file)}")
+                        
+                except Exception as e:
+                    print(f"⚠️ Error deleting {csv_file}: {e}")
+            
+            if deleted_count > 0:
+                print(f"🧹 Cleanup complete: removed {deleted_count} old CSV files for {self.crypto_symbol}")
+            
+        except Exception as e:
+            print(f"❌ Error during CSV cleanup for {self.crypto_symbol}: {e}")
+
     def log_data_continuous(self):
-        """Continuous logging loop with simple JSON timing"""
+        """Continuous logging loop with proper JSON timing"""
         json_counter = 0  # Simple counter for JSON generation
         
         while True:
@@ -197,14 +231,23 @@ class CryptoLogger:
             
             json_counter += 1
             
-            # Update JSON files every 5 minutes (300 seconds) - SIMPLE AND RELIABLE
+            # Update recent.json every 5 minutes (300 seconds)
             if json_counter % 300 == 0:
-                print(f"📊 5-minute interval - updating JSON files for {self.crypto_symbol}")
+                print(f"📊 5-minute interval - updating recent.json for {self.crypto_symbol}")
                 try:
                     self.process_recent_json()
-                    self.process_historical_json()
                 except Exception as e:
-                    print(f"❌ Error updating JSON files: {e}")
+                    print(f"❌ Error updating recent.json: {e}")
+            
+            # Update historical.json every 1 hour (3600 seconds) 
+            if json_counter % 3600 == 0:
+                print(f"🏛️ 1-hour interval - updating historical.json for {self.crypto_symbol}")
+                try:
+                    self.process_historical_json()
+                    # Also cleanup old CSV files to prevent disk space issues
+                    self.cleanup_old_csv_files()
+                except Exception as e:
+                    print(f"❌ Error updating historical.json: {e}")
                 json_counter = 0  # Reset to prevent overflow
             
             elapsed = time.time() - start_time
@@ -361,8 +404,9 @@ def create_app(crypto_symbol):
                 "crypto": crypto_symbol,
                 "timestamp": datetime.now(UTC).isoformat(),
                 "timing": {
-                    "recent_json": "Updates automatically every 60 seconds",
-                    "historical_json": "Updates automatically every 3600 seconds (1 hour)"
+                    "recent_json": "Updates automatically every 5 minutes (300 seconds)",
+                    "historical_json": "Updates automatically every 1 hour (3600 seconds)",
+                    "csv_rotation": "Every 8 hours with 7-day cleanup"
                 },
                 "note": "Manual generation complete. Automatic updates use counter-based timing."
             })
