@@ -1,19 +1,7 @@
 #!/usr/bin/env python3
 """
 Render Deployment Script for Multi-Crypto Logger
-Entry point for Render.com cloud deployment
-
-This script manages the deployment of the cryptocurrency logger on Render.com.
-It can run a single cryptocurrency or multiple based on environment variables.
-
-Environment Variables:
-- CRYPTO_SYMBOL: Single cryptocurrency to track (e.g., "ADA")
-- CRYPTO_SYMBOLS: Multiple cryptocurrencies comma-separated (e.g., "ADA,BTC,ETH")
-- PORT: Port to run on (provided by Render)
-
-Usage:
-- Single crypto: Set CRYPTO_SYMBOL=ADA
-- Multiple cryptos: Set CRYPTO_SYMBOLS=ADA,BTC,ETH
+Updated: 2025-07-30 23:40 UTC - L5 data fixes applied
 """
 
 import os
