@@ -98,8 +98,7 @@ class CryptoLogger:
             self.last_logged["timestamp"] = data["timestamp"]
             print(f"[{data['timestamp']}] ✅ {self.crypto_symbol} logged to {filename}")
             
-            # Only process JSON files at proper intervals
-            self.check_and_process_json()
+            # NO automatic JSON processing - use separate timer thread
             return True
             
         except Exception as e:
@@ -190,9 +189,25 @@ class CryptoLogger:
 
     def log_data_continuous(self):
         """Continuous logging loop"""
+        json_counter = 0  # Counter to track seconds for JSON timing
+        
         while True:
             start_time = time.time()
             self.log_data_once()
+            
+            # Increment counter every second
+            json_counter += 1
+            
+            # Generate recent.json every 60 seconds (1 minute)
+            if json_counter % 60 == 0:
+                print(f"📊 60-second interval reached - updating recent.json for {self.crypto_symbol}")
+                self.process_recent_json()
+                
+            # Generate historical.json every 3600 seconds (1 hour)  
+            if json_counter % 3600 == 0:
+                print(f"🏛️ 1-hour interval reached - updating historical.json for {self.crypto_symbol}")
+                self.process_historical_json()
+                json_counter = 0  # Reset counter to prevent overflow
             
             elapsed = time.time() - start_time
             sleep_time = max(0, 1.0 - elapsed)
@@ -347,7 +362,11 @@ def create_app(crypto_symbol):
                 "historical_json": "/historical.json", 
                 "crypto": crypto_symbol,
                 "timestamp": datetime.now(UTC).isoformat(),
-                "note": "Manual generation complete. Automatic updates: recent=1min, historical=1hour"
+                "timing": {
+                    "recent_json": "Updates automatically every 60 seconds",
+                    "historical_json": "Updates automatically every 3600 seconds (1 hour)"
+                },
+                "note": "Manual generation complete. Automatic updates use counter-based timing."
             })
         except Exception as e:
             import traceback
@@ -372,10 +391,22 @@ def run_crypto_server(crypto_symbol, port=None):
     app = create_app(crypto_symbol)
     logger = app.crypto_logger
     
+    # Generate initial JSON files if they don't exist
+    recent_file = os.path.join(logger.data_folder, "recent.json")
+    historical_file = os.path.join(logger.data_folder, "historical.json")
+    
+    if not os.path.exists(recent_file):
+        print(f"🔄 Creating initial recent.json for {crypto_symbol}")
+        logger.process_recent_json()
+        
+    if not os.path.exists(historical_file):
+        print(f"🔄 Creating initial historical.json for {crypto_symbol}")
+        logger.process_historical_json()
+    
     # Start logging thread
     logging_thread = threading.Thread(target=logger.log_data_continuous, daemon=True)
     logging_thread.start()
-    print(f"✅ Started {crypto_symbol} logger thread")
+    print(f"✅ Started {crypto_symbol} logger thread with timed JSON updates")
     
     print(f"🚀 Starting {crypto_symbol} server on port {port}")
     try:
