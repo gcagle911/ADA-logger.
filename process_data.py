@@ -37,7 +37,7 @@ def process_csv_to_json():
                 df = pd.read_csv(csv_file)
                 if not df.empty:
                     # Ensure timestamp is datetime with proper ISO8601 parsing
-                    df['timestamp'] = pd.to_datetime(df['timestamp'], format='ISO8601')
+                    df['timestamp'] = pd.to_datetime(df['timestamp'], format='ISO8601', utc=True)
                     all_dataframes.append(df)
                     print(f"✅ Loaded {csv_file}: {len(df)} records")
             except Exception as e:

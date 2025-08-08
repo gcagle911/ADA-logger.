@@ -29,42 +29,46 @@ def get_current_csv_filename():
 
 def fetch_orderbook():
     url = "https://api.exchange.coinbase.com/products/ADA-USD/book?level=2"
-    response = requests.get(url)
+    response = requests.get(url, timeout=10)
+    response.raise_for_status()
     data = response.json()
 
     bids = data.get("bids", [])
     asks = data.get("asks", [])
+
+    if not bids or not asks:
+        raise ValueError("Empty orderbook data")
 
     best_bid = float(bids[0][0])
     best_ask = float(asks[0][0])
     mid_price = (best_bid + best_ask) / 2
     spread = best_ask - best_bid
 
-                # L5 average spread calculation (top 5 orderbook levels)
-            top_bids = [float(b[0]) for b in bids[:5]]
-            top_asks = [float(a[0]) for a in asks[:5]]
-            if len(top_bids) < 5 or len(top_asks) < 5:
-                spread_avg_L5 = spread
-                spread_avg_L5_pct = (spread / mid_price) * 100
-            else:
-                bid_avg = sum(top_bids) / 5
-                ask_avg = sum(top_asks) / 5
-                spread_avg_L5 = ask_avg - bid_avg
-                spread_avg_L5_pct = (spread_avg_L5 / mid_price) * 100
+    # L5 average spread calculation (top 5 orderbook levels)
+    top_bids = [float(b[0]) for b in bids[:5]]
+    top_asks = [float(a[0]) for a in asks[:5]]
+    if len(top_bids) < 5 or len(top_asks) < 5:
+        spread_avg_L5 = spread
+        spread_avg_L5_pct = (spread / mid_price) * 100
+    else:
+        bid_avg = sum(top_bids) / 5
+        ask_avg = sum(top_asks) / 5
+        spread_avg_L5 = ask_avg - bid_avg
+        spread_avg_L5_pct = (spread_avg_L5 / mid_price) * 100
 
-            volume = sum(float(b[1]) for b in bids[:5]) + sum(float(a[1]) for a in asks[:5])
-            return {
-            "timestamp": datetime.now(UTC).isoformat(),
-            "asset": "ADA-USD",
-            "exchange": "Coinbase",
-            "price": mid_price,
-            "bid": best_bid,
-            "ask": best_ask,
-            "spread": spread,
-            "volume": volume,
-            "spread_avg_L5": spread_avg_L5,
-            "spread_avg_L5_pct": spread_avg_L5_pct
-        }
+    volume = sum(float(b[1]) for b in bids[:5]) + sum(float(a[1]) for a in asks[:5])
+    return {
+        "timestamp": datetime.now(UTC).isoformat(),
+        "asset": "ADA-USD",
+        "exchange": "Coinbase",
+        "price": mid_price,
+        "bid": best_bid,
+        "ask": best_ask,
+        "spread": spread,
+        "volume": volume,
+        "spread_avg_L5": spread_avg_L5,
+        "spread_avg_L5_pct": spread_avg_L5_pct
+    }
 
 def log_data():
     while True:
@@ -271,7 +275,7 @@ def debug_status():
         for filename in files_to_check:
             file_path = os.path.join(DATA_FOLDER, filename)
             if os.path.exists(file_path):
-                file_time = datetime.fromtimestamp(os.path.getmtime(file_path))
+                file_time = datetime.fromtimestamp(os.path.getmtime(file_path), UTC)
                 age_hours = (datetime.now(UTC) - file_time).total_seconds() / 3600
                 file_size = os.path.getsize(file_path)
                 
