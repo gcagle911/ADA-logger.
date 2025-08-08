@@ -37,7 +37,7 @@ def process_csv_to_json():
                 df = pd.read_csv(csv_file)
                 if not df.empty:
                     # Ensure timestamp is datetime with proper ISO8601 parsing
-                    df['timestamp'] = pd.to_datetime(df['timestamp'], format='ISO8601')
+                    df['timestamp'] = pd.to_datetime(df['timestamp'], format='ISO8601', utc=True)
                     all_dataframes.append(df)
                     print(f"✅ Loaded {csv_file}: {len(df)} records")
             except Exception as e:
@@ -89,12 +89,12 @@ def _generate_historical_json(df):
         for timestamp, row in resampled.iterrows():
             chart_data.append({
                 "time": timestamp.isoformat(),
-                "price": round(float(row['price']), 2),
-                "bid": round(float(row['bid']), 2),
-                "ask": round(float(row['ask']), 2),
-                "spread": round(float(row['spread']), 4),
-                "spread_pct": round(float(row['spread_avg_L5_pct']), 6),
-                "volume": round(float(row['volume']), 2)
+                "price": float(row['price']),
+                "bid": float(row['bid']),
+                "ask": float(row['ask']),
+                "spread": float(row['spread']),
+                "spread_pct": float(row['spread_avg_L5_pct']),
+                "volume": float(row['volume'])
             })
         
         output_path = os.path.join(DATA_FOLDER, "historical.json")
@@ -133,12 +133,12 @@ def _generate_recent_json(df):
         for timestamp, row in resampled.iterrows():
             chart_data.append({
                 "time": timestamp.isoformat(),
-                "price": round(float(row['price']), 2),
-                "bid": round(float(row['bid']), 2),
-                "ask": round(float(row['ask']), 2),
-                "spread": round(float(row['spread']), 4),
-                "spread_pct": round(float(row['spread_avg_L5_pct']), 6),
-                "volume": round(float(row['volume']), 2)
+                "price": float(row['price']),
+                "bid": float(row['bid']),
+                "ask": float(row['ask']),
+                "spread": float(row['spread']),
+                "spread_pct": float(row['spread_avg_L5_pct']),
+                "volume": float(row['volume'])
             })
         
         output_path = os.path.join(DATA_FOLDER, "recent.json")
@@ -172,12 +172,12 @@ def _generate_daily_json_files(df):
             for timestamp, row in group_resampled.iterrows():
                 chart_data.append({
                     "time": timestamp.isoformat(),
-                    "price": round(float(row['price']), 2),
-                    "bid": round(float(row['bid']), 2),
-                    "ask": round(float(row['ask']), 2),
-                    "spread": round(float(row['spread']), 4),
-                    "spread_pct": round(float(row['spread_avg_L5_pct']), 6),
-                    "volume": round(float(row['volume']), 2)
+                    "price": float(row['price']),
+                    "bid": float(row['bid']),
+                    "ask": float(row['ask']),
+                    "spread": float(row['spread']),
+                    "spread_pct": float(row['spread_avg_L5_pct']),
+                    "volume": float(row['volume'])
                 })
             
             if chart_data:
