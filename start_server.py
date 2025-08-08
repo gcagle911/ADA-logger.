@@ -50,13 +50,13 @@ def generate_sample_data(hours=48, interval_minutes=1):
             "timestamp": timestamp.isoformat(),
             "asset": "ADA-USD",
             "exchange": "Coinbase",
-            "price": round(price, 2),
-            "bid": round(price - (price * spread_base / 2), 2),
-            "ask": round(price + (price * spread_base / 2), 2),
-            "spread": round(price * spread_base, 2),
+            "price": price,
+            "bid": price - (price * spread_base / 2),
+            "ask": price + (price * spread_base / 2),
+            "spread": price * spread_base,
             "volume": 50 + (hash(str(timestamp)) % 100),  # Random volume
-            "spread_avg_L5": round(price * spread_base, 6),
-            "spread_avg_L5_pct": round(spread_pct, 8)
+            "spread_avg_L5": price * spread_base,
+            "spread_avg_L5_pct": spread_pct
         }
         data_points.append(data_point)
     
