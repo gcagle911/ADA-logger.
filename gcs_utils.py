@@ -1,12 +1,15 @@
 import os
 import datetime
 import mimetypes
+import json
 from typing import Optional
 
 try:
     from google.cloud import storage  # type: ignore
+    from google.oauth2 import service_account  # type: ignore
 except Exception:  # pragma: no cover
     storage = None  # Library might not be installed in local/dev
+    service_account = None
 
 
 def is_gcs_enabled() -> bool:
@@ -14,16 +17,61 @@ def is_gcs_enabled() -> bool:
     return bool(os.environ.get("GCS_BUCKET")) and storage is not None
 
 
+def _build_storage_client(project: Optional[str] = None):
+    """Return a storage.Client using either a credentials file path or inline JSON.
+
+    Resolution order:
+    1) If GOOGLE_APPLICATION_CREDENTIALS points to an existing file, use it (ADC default)
+    2) If GOOGLE_APPLICATION_CREDENTIALS contains inline JSON, parse it
+    3) If GOOGLE_APPLICATION_CREDENTIALS_JSON (or compatible aliases) is set, parse it
+    4) Fallback to default ADC (metadata/server-provided creds if available)
+    """
+    # If google auth libs are not available, let caller handle
+    if storage is None:
+        raise RuntimeError("google-cloud-storage is not installed")
+
+    credentials = None
+
+    gac = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+    if gac:
+        # Case 1: Path to existing file
+        if os.path.exists(gac):
+            return storage.Client(project=project)
+        # Case 2: Inline JSON content
+        if gac.strip().startswith("{") and service_account is not None:
+            try:
+                info = json.loads(gac)
+                credentials = service_account.Credentials.from_service_account_info(info)
+                return storage.Client(project=project, credentials=credentials)
+            except Exception:
+                pass
+
+    # Case 3: Dedicated JSON env vars supported by some setups
+    for env_name in ("GOOGLE_APPLICATION_CREDENTIALS_JSON", "GCP_SERVICE_ACCOUNT_JSON", "GOOGLE_CREDENTIALS_JSON"):
+        raw = os.environ.get(env_name)
+        if raw and service_account is not None:
+            try:
+                info = json.loads(raw)
+                credentials = service_account.Credentials.from_service_account_info(info)
+                return storage.Client(project=project, credentials=credentials)
+            except Exception:
+                continue
+
+    # Case 4: Default ADC
+    return storage.Client(project=project)
+
+
 def get_bucket():
     """Return a Google Cloud Storage Bucket client using env config.
     Requires env: GCS_BUCKET; optional: GCP_PROJECT.
+    Supports credentials via file path or inline JSON (see _build_storage_client).
     """
     if not is_gcs_enabled():
         raise RuntimeError("GCS is not enabled or google-cloud-storage is not installed")
 
     bucket_name = os.environ["GCS_BUCKET"]
     project = os.environ.get("GCP_PROJECT")
-    client = storage.Client(project=project) if project else storage.Client()
+    client = _build_storage_client(project=project)
     return client.bucket(bucket_name)
 
 
