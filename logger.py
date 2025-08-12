@@ -19,6 +19,15 @@ last_logged = {"timestamp": None}
 DATA_FOLDER = "render_app/data"
 os.makedirs(DATA_FOLDER, exist_ok=True)
 
+# Optional: hydrate JSON files from GCS on start
+try:
+    import gcs_utils  # type: ignore
+    if gcs_utils.is_gcs_enabled() and os.environ.get("GCS_SYNC_ON_START", "true").lower() == "true":
+        gcs_utils.download_if_exists(os.path.join(DATA_FOLDER, "recent.json"), os.path.join(DATA_FOLDER, "recent.json"))
+        gcs_utils.download_if_exists(os.path.join(DATA_FOLDER, "historical.json"), os.path.join(DATA_FOLDER, "historical.json"))
+except Exception:
+    pass
+
 # 🔁 Rotates files every 8 hours (00, 08, 16 UTC)
 def get_current_csv_filename():
     now = datetime.now(UTC)
@@ -89,6 +98,15 @@ def log_data():
 
             # Run comprehensive JSON generation with full historical context
             process_csv_to_json()
+            
+            # Best-effort CSV upload for durability
+            try:
+                from gcs_utils import is_gcs_enabled, upload_if_exists
+                if is_gcs_enabled():
+                    current_csv = os.path.join(DATA_FOLDER, get_current_csv_filename())
+                    upload_if_exists(current_csv, current_csv, content_type="text/csv")
+            except Exception:
+                pass
 
         except Exception as e:
             print("🚨 Error in logger loop:", str(e))

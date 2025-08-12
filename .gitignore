@@ -1,0 +1,22 @@
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Envs
+.env
+.venv/
+venv/
+
+# Data artifacts
+render_app/data/**/*.csv
+render_app/data/**/*.json
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python packaging
+build/
+dist/
+.eggs/
+*.egg-info/

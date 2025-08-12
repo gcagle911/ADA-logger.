@@ -21,9 +21,18 @@ def start_logger_for_symbol(crypto_symbol: str) -> CryptoLogger:
     crypto_symbol = crypto_symbol.upper()
     logger = CryptoLogger(crypto_symbol)
 
-    # Ensure initial JSON exists
+    # Ensure initial JSON exists (try to hydrate from GCS first if enabled)
     recent_file = os.path.join(logger.data_folder, "recent.json")
     historical_file = os.path.join(logger.data_folder, "historical.json")
+
+    try:
+        import gcs_utils  # type: ignore
+        sync_on_start = os.environ.get("GCS_SYNC_ON_START", "true").lower() == "true"
+        if gcs_utils.is_gcs_enabled() and sync_on_start:
+            gcs_utils.download_if_exists(recent_file, recent_file)
+            gcs_utils.download_if_exists(historical_file, historical_file)
+    except Exception:
+        pass
 
     if not os.path.exists(recent_file):
         print(f"🔄 Creating initial recent.json for {crypto_symbol}")

@@ -204,6 +204,15 @@ class CryptoLogger:
                     self.process_recent_json()
                 except Exception as e:
                     print(f"❌ Error updating recent.json: {e}")
+                
+                # Best-effort: upload current CSV to GCS for durability
+                try:
+                    from gcs_utils import is_gcs_enabled, upload_if_exists
+                    if is_gcs_enabled():
+                        current_csv = os.path.join(self.data_folder, self.get_current_csv_filename())
+                        upload_if_exists(current_csv, current_csv, content_type="text/csv")
+                except Exception as _:
+                    pass
             
             # Update historical.json every 10 minutes (600 seconds) 
             if json_counter % 600 == 0:
