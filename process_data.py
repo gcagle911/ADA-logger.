@@ -4,6 +4,12 @@ import json
 from datetime import datetime, timedelta, UTC
 import glob
 
+# Optional GCS sync for generated files
+try:
+    import gcs_utils  # type: ignore
+except Exception:
+    gcs_utils = None
+
 DATA_FOLDER = "render_app/data"
 
 def process_csv_to_json():
@@ -101,6 +107,13 @@ def _generate_historical_json(df):
         with open(output_path, 'w') as f:
             json.dump(chart_data, f, indent=2)
         
+        # Optional: upload to GCS
+        try:
+            if gcs_utils and gcs_utils.is_gcs_enabled():
+                gcs_utils.upload_if_exists(output_path, output_path, content_type="application/json")
+        except Exception as _:
+            pass
+        
         print(f"📊 Generated historical.json: {len(chart_data)} records")
         
     except Exception as e:
@@ -145,6 +158,13 @@ def _generate_recent_json(df):
         with open(output_path, 'w') as f:
             json.dump(chart_data, f, indent=2)
         
+        # Optional: upload to GCS
+        try:
+            if gcs_utils and gcs_utils.is_gcs_enabled():
+                gcs_utils.upload_if_exists(output_path, output_path, content_type="application/json")
+        except Exception as _:
+            pass
+        
         print(f"⚡ Generated recent.json: {len(chart_data)} records (last 24h)")
         
     except Exception as e:
@@ -186,6 +206,13 @@ def _generate_daily_json_files(df):
                 with open(output_path, 'w') as f:
                     json.dump(chart_data, f, indent=2)
                 
+                # Optional: upload to GCS
+                try:
+                    if gcs_utils and gcs_utils.is_gcs_enabled():
+                        gcs_utils.upload_if_exists(output_path, output_path, content_type="application/json")
+                except Exception as _:
+                    pass
+                
                 print(f"📅 Generated {filename}: {len(chart_data)} records")
         
     except Exception as e:
@@ -220,6 +247,13 @@ def _generate_metadata(df, csv_files):
         with open(output_path, 'w') as f:
             json.dump(metadata, f, indent=2)
         
+        # Optional: upload to GCS
+        try:
+            if gcs_utils and gcs_utils.is_gcs_enabled():
+                gcs_utils.upload_if_exists(output_path, output_path, content_type="application/json")
+        except Exception as _:
+            pass
+        
         print(f"📋 Generated metadata.json")
         
     except Exception as e:
@@ -252,6 +286,13 @@ def _generate_index(csv_files):
         output_path = os.path.join(DATA_FOLDER, "index.json")
         with open(output_path, 'w') as f:
             json.dump(index_data, f, indent=2)
+        
+        # Optional: upload to GCS
+        try:
+            if gcs_utils and gcs_utils.is_gcs_enabled():
+                gcs_utils.upload_if_exists(output_path, output_path, content_type="application/json")
+        except Exception as _:
+            pass
         
         print(f"🗂️ Generated index.json")
         
