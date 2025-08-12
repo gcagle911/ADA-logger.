@@ -231,6 +231,40 @@ def all_status():
     return jsonify(statuses)
 
 
+@app.route("/gcs-self-test")
+def gcs_self_test():
+    """Attempt to upload a small test file to GCS and report the result."""
+    try:
+        import gcs_utils  # type: ignore
+        if not gcs_utils.is_gcs_enabled():
+            return jsonify({
+                "ok": False,
+                "error": "GCS not enabled (missing GCS_BUCKET or library)",
+            }), 400
+
+        bucket = os.environ.get("GCS_BUCKET", "")
+        test_local_dir = os.path.join("render_app", "data")
+        os.makedirs(test_local_dir, exist_ok=True)
+        test_local_path = os.path.join(test_local_dir, "gcs-self-test.txt")
+        with open(test_local_path, "w") as f:
+            f.write(f"self-test at {datetime.now(UTC).isoformat()}\n")
+
+        test_blob_path = os.path.join("render_app", "data", "gcs-self-test.txt")
+        uploaded = gcs_utils.upload_if_exists(test_local_path, test_blob_path, content_type="text/plain")
+
+        return jsonify({
+            "ok": uploaded,
+            "bucket": bucket,
+            "blob_path": test_blob_path.replace("\\", "/"),
+            "gs_url": f"gs://{bucket}/{test_blob_path.replace('\\', '/')}"
+        }), (200 if uploaded else 500)
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "error": str(e)
+        }), 500
+
+
 def run_app():
     # Start all configured cryptos
     for symbol in get_available_cryptos():
