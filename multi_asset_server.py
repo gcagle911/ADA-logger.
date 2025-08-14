@@ -29,8 +29,14 @@ def start_logger_for_symbol(crypto_symbol: str) -> CryptoLogger:
         import gcs_utils  # type: ignore
         sync_on_start = os.environ.get("GCS_SYNC_ON_START", "true").lower() == "true"
         if gcs_utils.is_gcs_enabled() and sync_on_start:
+            # Hydrate JSONs from GCS-first
             gcs_utils.download_if_exists(recent_file, recent_file)
             gcs_utils.download_if_exists(historical_file, historical_file)
+            # Hydrate current CSV for continuity
+            asset = os.path.basename(logger.data_folder)
+            current_csv = os.path.join(logger.data_folder, logger.get_current_csv_filename())
+            csv_blob = os.path.join("csv", asset, logger.get_current_csv_filename())
+            gcs_utils.download_if_exists(csv_blob, current_csv)
     except Exception:
         pass
 
@@ -250,7 +256,7 @@ def gcs_self_test():
             f.write(f"self-test at {datetime.now(UTC).isoformat()}\n")
 
         test_blob_path = os.path.join("render_app", "data", "gcs-self-test.txt")
-        uploaded = gcs_utils.upload_if_exists(test_local_path, test_blob_path, content_type="text/plain")
+        uploaded = gcs_utils.upload_to_gcs(test_local_path, test_blob_path, content_type="text/plain")
 
         return jsonify({
             "ok": uploaded,

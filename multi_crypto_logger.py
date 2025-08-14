@@ -11,6 +11,7 @@ import threading
 from datetime import datetime, UTC
 from config import get_crypto_config, get_available_cryptos, get_crypto_from_port
 import sys
+from typing import Optional
 
 class CryptoLogger:
     """Individual cryptocurrency logger"""
@@ -22,6 +23,19 @@ class CryptoLogger:
         self.data_folder = self.config["data_folder"]
         self.last_json_update = {"recent": time.time(), "historical": time.time()}  # Track last JSON updates
         os.makedirs(self.data_folder, exist_ok=True)
+        # CSV continuity: hydrate current rotation file from GCS if available
+        try:
+            from gcs_utils import download_from_gcs, is_gcs_enabled
+            current_csv = os.path.join(self.data_folder, self.get_current_csv_filename())
+            asset = os.path.basename(self.data_folder)
+            gcs_blob = os.path.join("csv", asset, self.get_current_csv_filename())
+            if is_gcs_enabled():
+                ok = download_from_gcs(gcs_blob, current_csv)
+                if not ok:
+                    alt_blob = os.path.join("csv", self.get_current_csv_filename())
+                    download_from_gcs(alt_blob, current_csv)
+        except Exception:
+            pass
         
     def get_current_csv_filename(self):
         """Generate CSV filename with 8-hour rotation"""
@@ -190,10 +204,24 @@ class CryptoLogger:
     def log_data_continuous(self):
         """Continuous logging loop with proper JSON timing"""
         json_counter = 0  # Simple counter for JSON generation
+        last_rotation_file = None
         
         while True:
             start_time = time.time()
             self.log_data_once()
+            # Detect rotation and upload just-completed CSV
+            try:
+                current_file = os.path.join(self.data_folder, self.get_current_csv_filename())
+                if last_rotation_file is None:
+                    last_rotation_file = current_file
+                if current_file != last_rotation_file:
+                    # Rotation occurred: upload previous file
+                    from gcs_utils import upload_csv_to_gcs, is_gcs_enabled
+                    if is_gcs_enabled():
+                        upload_csv_to_gcs(last_rotation_file)
+                    last_rotation_file = current_file
+            except Exception:
+                pass
             
             json_counter += 1
             
@@ -207,10 +235,10 @@ class CryptoLogger:
                 
                 # Best-effort: upload current CSV to GCS for durability
                 try:
-                    from gcs_utils import is_gcs_enabled, upload_if_exists
+                    from gcs_utils import is_gcs_enabled, upload_csv_to_gcs
                     if is_gcs_enabled():
                         current_csv = os.path.join(self.data_folder, self.get_current_csv_filename())
-                        upload_if_exists(current_csv, current_csv, content_type="text/csv")
+                        upload_csv_to_gcs(current_csv)
                 except Exception as _:
                     pass
             
@@ -416,6 +444,20 @@ def run_crypto_server(crypto_symbol, port=None):
     if not os.path.exists(historical_file):
         print(f"🔄 Creating initial historical.json for {crypto_symbol}")
         logger.process_historical_json()
+
+    # CSV continuity: ensure current rotation CSV is hydrated from GCS if present
+    try:
+        from gcs_utils import is_gcs_enabled, download_from_gcs
+        if is_gcs_enabled():
+            current_csv = os.path.join(logger.data_folder, logger.get_current_csv_filename())
+            asset = os.path.basename(logger.data_folder)
+            gcs_blob = os.path.join("csv", asset, logger.get_current_csv_filename())
+            ok = download_from_gcs(gcs_blob, current_csv)
+            if not ok:
+                alt_blob = os.path.join("csv", logger.get_current_csv_filename())
+                download_from_gcs(alt_blob, current_csv)
+    except Exception:
+        pass
     
     # Start logging thread
     logging_thread = threading.Thread(target=logger.log_data_continuous, daemon=True)

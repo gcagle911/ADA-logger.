@@ -23,8 +23,14 @@ os.makedirs(DATA_FOLDER, exist_ok=True)
 try:
     import gcs_utils  # type: ignore
     if gcs_utils.is_gcs_enabled() and os.environ.get("GCS_SYNC_ON_START", "true").lower() == "true":
+        # JSON hydration
         gcs_utils.download_if_exists(os.path.join(DATA_FOLDER, "recent.json"), os.path.join(DATA_FOLDER, "recent.json"))
         gcs_utils.download_if_exists(os.path.join(DATA_FOLDER, "historical.json"), os.path.join(DATA_FOLDER, "historical.json"))
+        # CSV continuity: hydrate current rotation CSV
+        asset = os.path.basename(DATA_FOLDER)
+        current_csv = os.path.join(DATA_FOLDER, get_current_csv_filename())
+        csv_blob = os.path.join("csv", asset, get_current_csv_filename())
+        gcs_utils.download_if_exists(csv_blob, current_csv)
 except Exception:
     pass
 
@@ -101,10 +107,10 @@ def log_data():
             
             # Best-effort CSV upload for durability
             try:
-                from gcs_utils import is_gcs_enabled, upload_if_exists
+                from gcs_utils import is_gcs_enabled, upload_csv_to_gcs
                 if is_gcs_enabled():
                     current_csv = os.path.join(DATA_FOLDER, get_current_csv_filename())
-                    upload_if_exists(current_csv, current_csv, content_type="text/csv")
+                    upload_csv_to_gcs(current_csv)
             except Exception:
                 pass
 
