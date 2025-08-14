@@ -168,7 +168,7 @@ def save_historical_data(df_full):
     # Save metadata
     metadata_path = os.path.join(DATA_FOLDER, "metadata.json")
     with open(metadata_path, "w") as f:
-        json.dump(metadata, f, indent=2, default=str)
+        json.dump(metadata, f, indent=2, default=str, allow_nan=False)
     
     print(f"📚 Saved historical.json: {len(df_full)} records ({metadata['file_size_mb']}MB)")
     return len(df_full)
@@ -220,7 +220,7 @@ def save_index_json(daily_files, recent_count, historical_count):
     
     index_path = os.path.join(DATA_FOLDER, "index.json")
     with open(index_path, "w") as f:
-        json.dump(index_data, f, indent=2)
+        json.dump(index_data, f, indent=2, allow_nan=False)
     
     print(f"📋 Saved index.json")
 

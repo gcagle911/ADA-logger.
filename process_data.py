@@ -3,6 +3,7 @@ import pandas as pd
 import json
 from datetime import datetime, timedelta, UTC
 import glob
+from typing import List, Dict, Optional
 
 # Optional GCS sync for generated files
 try:
@@ -12,7 +13,30 @@ except Exception:
 
 DATA_FOLDER = "render_app/data"
 
-def process_csv_to_json():
+# Limits for JSON outputs
+RECENT_MAX_POINTS = 24 * 60  # 1 point per minute for last 24h
+HISTORICAL_MAX_POINTS = 200_000  # safety cap
+
+def _merge_by_time(existing: List[Dict], new: List[Dict], *, limit: Optional[int] = None) -> List[Dict]:
+    """Merge two lists of records keyed by 'time', de-duplicate, sort asc, and trim to limit."""
+    merged = {}
+    for rec in existing or []:
+        t = rec.get("time")
+        if t is not None:
+            merged[t] = rec
+    for rec in new or []:
+        t = rec.get("time")
+        if t is not None:
+            merged[t] = rec
+    # Sort by ISO8601 time ascending
+    items = list(merged.items())
+    items.sort(key=lambda kv: kv[0])
+    records = [kv[1] for kv in items]
+    if limit is not None and len(records) > limit:
+        records = records[-limit:]
+    return records
+
+def process_csv_to_json(bucket_name: Optional[str] = None):
     """
     Process all CSV files in the data folder and generate JSON files for chart consumption.
     Creates:
@@ -20,7 +44,7 @@ def process_csv_to_json():
     - recent.json: Last 24 hours of data
     - metadata.json: Dataset metadata
     - index.json: Index of available data
-    - output_YYYY-MM-DD.json: Daily files
+    - archive/1min/YYYY-MM-DD.json: Daily files (and backward-compatible output_YYYY-MM-DD.json)
     """
     try:
         os.makedirs(DATA_FOLDER, exist_ok=True)
@@ -61,11 +85,11 @@ def process_csv_to_json():
         print(f"📈 Combined dataset: {len(combined_df)} total records")
         
         # Generate different JSON outputs
-        _generate_historical_json(combined_df)
-        _generate_recent_json(combined_df)
-        _generate_daily_json_files(combined_df)
-        _generate_metadata(combined_df, csv_files)
-        _generate_index(csv_files)
+        _generate_historical_json(combined_df, bucket_name=bucket_name)
+        _generate_recent_json(combined_df, bucket_name=bucket_name)
+        _generate_daily_json_files(combined_df, bucket_name=bucket_name)
+        _generate_metadata(combined_df, csv_files, bucket_name=bucket_name)
+        _generate_index(csv_files, bucket_name=bucket_name)
         
         print("✅ JSON processing completed successfully!")
         
@@ -73,7 +97,7 @@ def process_csv_to_json():
         print(f"❌ Error in process_csv_to_json: {e}")
         raise
 
-def _generate_historical_json(df):
+def _generate_historical_json(df, *, bucket_name: Optional[str] = None):
     """Generate complete historical data JSON - RESAMPLED TO 1-MINUTE INTERVALS"""
     try:
         # CRITICAL FIX: Resample to 1-minute intervals instead of using every second
@@ -91,9 +115,9 @@ def _generate_historical_json(df):
         }).dropna()
         
         # Convert to chart format
-        chart_data = []
+        new_chart_data = []
         for timestamp, row in resampled.iterrows():
-            chart_data.append({
+            new_chart_data.append({
                 "time": timestamp.isoformat(),
                 "price": float(row['price']),
                 "bid": float(row['bid']),
@@ -104,22 +128,42 @@ def _generate_historical_json(df):
             })
         
         output_path = os.path.join(DATA_FOLDER, "historical.json")
-        with open(output_path, 'w') as f:
-            json.dump(chart_data, f, indent=2)
+        # GCS-first merge
+        try:
+            if gcs_utils and gcs_utils.is_gcs_enabled(bucket_name=bucket_name):
+                gcs_blob = output_path
+                gcs_utils.download_from_gcs(gcs_blob, output_path, bucket_name=bucket_name)
+        except Exception:
+            pass
+
+        existing_data: List[Dict] = []
+        try:
+            if os.path.exists(output_path):
+                with open(output_path, 'r') as rf:
+                    existing_data = json.load(rf)
+        except Exception:
+            existing_data = []
+
+        merged = _merge_by_time(existing_data, new_chart_data, limit=HISTORICAL_MAX_POINTS)
+        if gcs_utils:
+            gcs_utils.write_json_records(merged, output_path)
+        else:
+            with open(output_path, 'w') as f:
+                json.dump(merged, f, indent=2, allow_nan=False)
         
         # Optional: upload to GCS
         try:
-            if gcs_utils and gcs_utils.is_gcs_enabled():
-                gcs_utils.upload_if_exists(output_path, output_path, content_type="application/json")
+            if gcs_utils and gcs_utils.is_gcs_enabled(bucket_name=bucket_name):
+                gcs_utils.upload_to_gcs(output_path, output_path, bucket_name=bucket_name, content_type="application/json")
         except Exception as _:
             pass
         
-        print(f"📊 Generated historical.json: {len(chart_data)} records")
+        print(f"📊 Generated historical.json: {len(merged)} records")
         
     except Exception as e:
         print(f"❌ Error generating historical.json: {e}")
 
-def _generate_recent_json(df):
+def _generate_recent_json(df, *, bucket_name: Optional[str] = None):
     """Generate last 24 hours of data JSON - RESAMPLED TO 1-MINUTE INTERVALS"""
     try:
         # Get last 24 hours
@@ -142,9 +186,9 @@ def _generate_recent_json(df):
         }).dropna()
         
         # Convert to chart format
-        chart_data = []
+        new_chart_data = []
         for timestamp, row in resampled.iterrows():
-            chart_data.append({
+            new_chart_data.append({
                 "time": timestamp.isoformat(),
                 "price": float(row['price']),
                 "bid": float(row['bid']),
@@ -155,22 +199,42 @@ def _generate_recent_json(df):
             })
         
         output_path = os.path.join(DATA_FOLDER, "recent.json")
-        with open(output_path, 'w') as f:
-            json.dump(chart_data, f, indent=2)
+        # GCS-first merge
+        try:
+            if gcs_utils and gcs_utils.is_gcs_enabled(bucket_name=bucket_name):
+                gcs_blob = output_path
+                gcs_utils.download_from_gcs(gcs_blob, output_path, bucket_name=bucket_name)
+        except Exception:
+            pass
+
+        existing_data: List[Dict] = []
+        try:
+            if os.path.exists(output_path):
+                with open(output_path, 'r') as rf:
+                    existing_data = json.load(rf)
+        except Exception:
+            existing_data = []
+
+        merged = _merge_by_time(existing_data, new_chart_data, limit=RECENT_MAX_POINTS)
+        if gcs_utils:
+            gcs_utils.write_json_records(merged, output_path)
+        else:
+            with open(output_path, 'w') as f:
+                json.dump(merged, f, indent=2, allow_nan=False)
         
         # Optional: upload to GCS
         try:
-            if gcs_utils and gcs_utils.is_gcs_enabled():
-                gcs_utils.upload_if_exists(output_path, output_path, content_type="application/json")
+            if gcs_utils and gcs_utils.is_gcs_enabled(bucket_name=bucket_name):
+                gcs_utils.upload_to_gcs(output_path, output_path, bucket_name=bucket_name, content_type="application/json")
         except Exception as _:
             pass
         
-        print(f"⚡ Generated recent.json: {len(chart_data)} records (last 24h)")
+        print(f"⚡ Generated recent.json: {len(merged)} records (last 24h)")
         
     except Exception as e:
         print(f"❌ Error generating recent.json: {e}")
 
-def _generate_daily_json_files(df):
+def _generate_daily_json_files(df, *, bucket_name: Optional[str] = None):
     """Generate daily JSON files"""
     try:
         # Group by date
@@ -188,9 +252,9 @@ def _generate_daily_json_files(df):
             }).ffill().dropna()
             
             # Convert to chart format
-            chart_data = []
+            new_chart_data = []
             for timestamp, row in group_resampled.iterrows():
-                chart_data.append({
+                new_chart_data.append({
                     "time": timestamp.isoformat(),
                     "price": float(row['price']),
                     "bid": float(row['bid']),
@@ -200,25 +264,62 @@ def _generate_daily_json_files(df):
                     "volume": float(row['volume'])
                 })
             
-            if chart_data:
-                filename = f"output_{date}.json"
-                output_path = os.path.join(DATA_FOLDER, filename)
-                with open(output_path, 'w') as f:
-                    json.dump(chart_data, f, indent=2)
-                
-                # Optional: upload to GCS
+            if new_chart_data:
+                # Primary archive path
+                archive_dir = os.path.join(DATA_FOLDER, "archive", "1min")
+                os.makedirs(archive_dir, exist_ok=True)
+                archive_filename = f"{date}.json"
+                archive_path = os.path.join(archive_dir, archive_filename)
+
+                # GCS-first merge for archive
                 try:
-                    if gcs_utils and gcs_utils.is_gcs_enabled():
-                        gcs_utils.upload_if_exists(output_path, output_path, content_type="application/json")
-                except Exception as _:
+                    if gcs_utils and gcs_utils.is_gcs_enabled(bucket_name=bucket_name):
+                        gcs_blob = archive_path
+                        gcs_utils.download_from_gcs(gcs_blob, archive_path, bucket_name=bucket_name)
+                except Exception:
+                    pass
+
+                existing_data: List[Dict] = []
+                try:
+                    if os.path.exists(archive_path):
+                        with open(archive_path, 'r') as rf:
+                            existing_data = json.load(rf)
+                except Exception:
+                    existing_data = []
+
+                merged = _merge_by_time(existing_data, new_chart_data, limit=None)
+                if gcs_utils:
+                    gcs_utils.write_json_records(merged, archive_path)
+                else:
+                    with open(archive_path, 'w') as f:
+                        json.dump(merged, f, indent=2, allow_nan=False)
+
+                # Backward-compatible filename
+                legacy_filename = f"output_{date}.json"
+                legacy_path = os.path.join(DATA_FOLDER, legacy_filename)
+                try:
+                    if gcs_utils:
+                        gcs_utils.write_json_records(merged, legacy_path)
+                    else:
+                        with open(legacy_path, 'w') as f:
+                            json.dump(merged, f, indent=2, allow_nan=False)
+                except Exception:
                     pass
                 
-                print(f"📅 Generated {filename}: {len(chart_data)} records")
-        
+                # Upload to GCS
+                try:
+                    if gcs_utils and gcs_utils.is_gcs_enabled(bucket_name=bucket_name):
+                        gcs_utils.upload_to_gcs(archive_path, archive_path, bucket_name=bucket_name, content_type="application/json")
+                        gcs_utils.upload_to_gcs(legacy_path, legacy_path, bucket_name=bucket_name, content_type="application/json")
+                except Exception:
+                    pass
+                
+                print(f"📅 Generated {archive_filename}: {len(merged)} records")
+         
     except Exception as e:
         print(f"❌ Error generating daily JSON files: {e}")
 
-def _generate_metadata(df, csv_files):
+def _generate_metadata(df, csv_files, *, bucket_name: Optional[str] = None):
     """Generate metadata about the dataset"""
     try:
         metadata = {
@@ -244,13 +345,22 @@ def _generate_metadata(df, csv_files):
         }
         
         output_path = os.path.join(DATA_FOLDER, "metadata.json")
-        with open(output_path, 'w') as f:
-            json.dump(metadata, f, indent=2)
+        if gcs_utils:
+            gcs_utils.write_json_records([metadata], output_path)
+            # rewrite as object form (not array) for compatibility
+            try:
+                with open(output_path, 'w') as f:
+                    json.dump(metadata, f, indent=2, allow_nan=False)
+            except Exception:
+                pass
+        else:
+            with open(output_path, 'w') as f:
+                json.dump(metadata, f, indent=2)
         
         # Optional: upload to GCS
         try:
-            if gcs_utils and gcs_utils.is_gcs_enabled():
-                gcs_utils.upload_if_exists(output_path, output_path, content_type="application/json")
+            if gcs_utils and gcs_utils.is_gcs_enabled(bucket_name=bucket_name):
+                gcs_utils.upload_to_gcs(output_path, output_path, bucket_name=bucket_name, content_type="application/json")
         except Exception as _:
             pass
         
@@ -259,20 +369,24 @@ def _generate_metadata(df, csv_files):
     except Exception as e:
         print(f"❌ Error generating metadata: {e}")
 
-def _generate_index(csv_files):
+def _generate_index(csv_files, *, bucket_name: Optional[str] = None):
     """Generate index of available data files"""
     try:
         # Get all JSON files that were generated
         json_files = []
         
         # List daily output files
-        daily_pattern = os.path.join(DATA_FOLDER, "output_*.json")
-        daily_files = [os.path.basename(f) for f in glob.glob(daily_pattern)]
+        daily_pattern_legacy = os.path.join(DATA_FOLDER, "output_*.json")
+        daily_files_legacy = [os.path.basename(f) for f in glob.glob(daily_pattern_legacy)]
+        daily_pattern_archive = os.path.join(DATA_FOLDER, "archive", "1min", "*.json")
+        daily_files_archive = [
+            os.path.join("archive/1min", os.path.basename(f)) for f in glob.glob(daily_pattern_archive)
+        ]
         
         index_data = {
             "generated_at": datetime.now(UTC).isoformat(),
             "csv_sources": [os.path.basename(f) for f in csv_files],
-            "daily_files": sorted(daily_files),
+            "daily_files": sorted(daily_files_legacy + daily_files_archive),
             "chart_files": [
                 "historical.json",
                 "recent.json"  
@@ -284,13 +398,22 @@ def _generate_index(csv_files):
         }
         
         output_path = os.path.join(DATA_FOLDER, "index.json")
-        with open(output_path, 'w') as f:
-            json.dump(index_data, f, indent=2)
+        if gcs_utils:
+            gcs_utils.write_json_records([index_data], output_path)
+            # rewrite as object form for compatibility
+            try:
+                with open(output_path, 'w') as f:
+                    json.dump(index_data, f, indent=2, allow_nan=False)
+            except Exception:
+                pass
+        else:
+            with open(output_path, 'w') as f:
+                json.dump(index_data, f, indent=2)
         
         # Optional: upload to GCS
         try:
-            if gcs_utils and gcs_utils.is_gcs_enabled():
-                gcs_utils.upload_if_exists(output_path, output_path, content_type="application/json")
+            if gcs_utils and gcs_utils.is_gcs_enabled(bucket_name=bucket_name):
+                gcs_utils.upload_to_gcs(output_path, output_path, bucket_name=bucket_name, content_type="application/json")
         except Exception as _:
             pass
         
@@ -301,3 +424,7 @@ def _generate_index(csv_files):
 
 if __name__ == "__main__":
     process_csv_to_json()
+
+def generate_all_jsons(bucket_name: Optional[str] = None):
+    """Helper to generate all JSON outputs with optional multi-bucket routing."""
+    return process_csv_to_json(bucket_name=bucket_name)
