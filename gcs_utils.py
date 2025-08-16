@@ -2,7 +2,7 @@ import os
 import datetime
 import mimetypes
 import json
-from typing import Optional
+from typing import Optional, List, Tuple
 
 try:
     from google.cloud import storage  # type: ignore
@@ -195,3 +195,39 @@ def generate_signed_url(blob_path: str, expiration_seconds: int = 3600) -> Optio
     url = blob.generate_signed_url(expiration=datetime.timedelta(seconds=expiration_seconds))
     _debug("generate_signed_url: success")
     return url
+
+
+def list_blobs_with_prefix(prefix: str) -> List[str]:
+    """List blob names under a given prefix. Returns empty list if GCS disabled."""
+    if not is_gcs_enabled():
+        return []
+    bucket = get_bucket()
+    normalized = _normalize_blob_path(prefix)
+    blob_names: List[str] = []
+    for blob in bucket.list_blobs(prefix=normalized):
+        blob_names.append(blob.name)
+    return blob_names
+
+
+def rsync_csvs_from_gcs(prefix: str, local_dir: str) -> Tuple[int, int]:
+    """Download missing CSVs from GCS under prefix to local_dir. Returns (downloaded, skipped)."""
+    if not is_gcs_enabled():
+        return (0, 0)
+    os.makedirs(local_dir, exist_ok=True)
+    downloaded = 0
+    skipped = 0
+    for blob_name in list_blobs_with_prefix(prefix):
+        if not blob_name.lower().endswith('.csv'):
+            continue
+        # Compute local target relative to the prefix root
+        rel_path = blob_name[len(_normalize_blob_path(prefix)):].lstrip('/')
+        local_path = os.path.join(local_dir, rel_path)
+        if os.path.exists(local_path) and os.path.getsize(local_path) > 0:
+            skipped += 1
+            continue
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        if download_file(blob_name, local_path):
+            downloaded += 1
+        else:
+            skipped += 1
+    return (downloaded, skipped)

@@ -17,6 +17,35 @@ app = Flask(__name__)
 CORS(app)
 
 
+def _hydrate_csvs_and_json(logger: CryptoLogger):
+    """Best-effort: pull all CSVs from GCS for this symbol and preserve existing JSON files."""
+    try:
+        import gcs_utils  # type: ignore
+        symbol = logger.crypto_symbol
+        if gcs_utils.is_gcs_enabled():
+            # CSV prefix in bucket mirrors local folder structure
+            csv_prefix = os.path.join(logger.data_folder, "").replace("\\", "/")
+            downloaded, skipped = gcs_utils.rsync_csvs_from_gcs(csv_prefix, logger.data_folder)
+            print(f"☁️ GCS CSV hydration for {symbol}: downloaded={downloaded}, skipped={skipped}")
+        else:
+            print("☁️ GCS not enabled; skipping CSV hydration")
+    except Exception as e:
+        print(f"⚠️ CSV hydration error: {e}")
+    
+    # Preserve existing JSONs by merging if new data exists
+    try:
+        _recent_path = os.path.join(logger.data_folder, "recent.json")
+        _hist_path = os.path.join(logger.data_folder, "historical.json")
+        # If files exist, keep them; regeneration will extend based on CSVs
+        # If missing, they will be created by start_logger_for_symbol
+        if os.path.exists(_recent_path):
+            print(f"🔒 Preserving existing recent.json for {logger.crypto_symbol}")
+        if os.path.exists(_hist_path):
+            print(f"🔒 Preserving existing historical.json for {logger.crypto_symbol}")
+    except Exception as e:
+        print(f"⚠️ JSON preservation check error: {e}")
+
+
 def start_logger_for_symbol(crypto_symbol: str) -> CryptoLogger:
     crypto_symbol = crypto_symbol.upper()
     logger = CryptoLogger(crypto_symbol)
@@ -29,6 +58,9 @@ def start_logger_for_symbol(crypto_symbol: str) -> CryptoLogger:
         import gcs_utils  # type: ignore
         sync_on_start = os.environ.get("GCS_SYNC_ON_START", "true").lower() == "true"
         if gcs_utils.is_gcs_enabled() and sync_on_start:
+            # NEW: Hydrate CSVs for full rebuild potential
+            _hydrate_csvs_and_json(logger)
+            # Also hydrate existing JSONs if present in bucket
             gcs_utils.download_if_exists(recent_file, recent_file)
             gcs_utils.download_if_exists(historical_file, historical_file)
     except Exception:

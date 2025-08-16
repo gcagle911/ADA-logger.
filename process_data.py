@@ -3,6 +3,7 @@ import pandas as pd
 import json
 from datetime import datetime, timedelta, UTC
 import glob
+from typing import List, Dict, Any  # type: ignore
 
 # Optional GCS sync for generated files
 try:
@@ -73,6 +74,26 @@ def process_csv_to_json():
         print(f"❌ Error in process_csv_to_json: {e}")
         raise
 
+def _merge_existing_json(output_path: str, new_records: List[Dict[str, Any]], key: str = "time") -> List[Dict[str, Any]]:
+	"""Merge new_records with existing JSON if present, de-duplicating by key (default: time)."""
+	existing: List[Dict[str, Any]] = []
+	if os.path.exists(output_path):
+		try:
+			with open(output_path, 'r') as f:
+				existing = json.load(f)
+		except Exception:
+			existing = []
+	# Build dict by key to dedupe, preferring newer records
+	merged_map = {rec.get(key): rec for rec in existing if key in rec}
+	for rec in new_records:
+		if key in rec:
+			merged_map[rec[key]] = rec
+	# Return sorted by time if key is time-like
+	try:
+		return sorted(merged_map.values(), key=lambda r: r.get(key, ""))
+	except Exception:
+		return list(merged_map.values())
+
 def _generate_historical_json(df):
     """Generate complete historical data JSON - RESAMPLED TO 1-MINUTE INTERVALS"""
     try:
@@ -104,6 +125,8 @@ def _generate_historical_json(df):
             })
         
         output_path = os.path.join(DATA_FOLDER, "historical.json")
+        # Merge with existing historical to avoid overwriting
+        chart_data = _merge_existing_json(output_path, chart_data, key="time")
         with open(output_path, 'w') as f:
             json.dump(chart_data, f, indent=2)
         
@@ -155,8 +178,19 @@ def _generate_recent_json(df):
             })
         
         output_path = os.path.join(DATA_FOLDER, "recent.json")
+        # Merge with existing recent to avoid overwriting but keep 24h window
+        merged = _merge_existing_json(output_path, chart_data, key="time")
+        # Enforce 24h window: filter by now-24h
+        now = datetime.now(UTC)
+        cutoff_time = now - timedelta(hours=24)
+        def _iso_to_dt(s):
+            try:
+                return datetime.fromisoformat(s.replace("Z", "+00:00"))
+            except Exception:
+                return now
+        merged = [r for r in merged if _iso_to_dt(r.get("time", "")) >= cutoff_time]
         with open(output_path, 'w') as f:
-            json.dump(chart_data, f, indent=2)
+            json.dump(merged, f, indent=2)
         
         # Optional: upload to GCS
         try:
@@ -203,6 +237,8 @@ def _generate_daily_json_files(df):
             if chart_data:
                 filename = f"output_{date}.json"
                 output_path = os.path.join(DATA_FOLDER, filename)
+                # Merge with existing daily files to avoid overwriting
+                chart_data = _merge_existing_json(output_path, chart_data, key="time")
                 with open(output_path, 'w') as f:
                     json.dump(chart_data, f, indent=2)
                 
