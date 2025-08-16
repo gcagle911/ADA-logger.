@@ -11,6 +11,8 @@ import threading
 from datetime import datetime, UTC
 from config import get_crypto_config, get_available_cryptos, get_crypto_from_port
 import sys
+import glob
+import shutil
 
 class CryptoLogger:
     """Individual cryptocurrency logger"""
@@ -227,6 +229,95 @@ class CryptoLogger:
             sleep_time = max(0, 1.0 - elapsed)
             time.sleep(sleep_time)
 
+def _normalized_path(s: str) -> str:
+    return s.replace("\\", "/").strip()
+
+
+def _copy_root_csvs_into_symbol_folder(logger) -> tuple[int, int]:
+    root_dir = os.path.join("render_app", "data")
+    symbol_dir = logger.data_folder
+    if os.path.abspath(root_dir) == os.path.abspath(symbol_dir):
+        return (0, 0)
+    os.makedirs(symbol_dir, exist_ok=True)
+    copied = 0
+    skipped = 0
+    for src in glob.glob(os.path.join(root_dir, "*.csv")):
+        dst = os.path.join(symbol_dir, os.path.basename(src))
+        if os.path.exists(dst) and os.path.getsize(dst) > 0:
+            skipped += 1
+            continue
+        try:
+            shutil.copy2(src, dst)
+            copied += 1
+        except Exception:
+            skipped += 1
+    return (copied, skipped)
+
+
+def _hydrate_from_gcs_and_rebuild(logger):
+    """Pull CSVs from GCS into local folders, then rebuild JSONs from all CSVs."""
+    symbol = logger.crypto_symbol
+    symbol_lower = symbol.lower()
+    try:
+        import gcs_utils  # type: ignore
+        if not gcs_utils.is_gcs_enabled():
+            print("☁️ GCS not enabled; skipping hydration")
+        else:
+            # Build candidate prefixes
+            import_prefixes = []
+            # Explicit list
+            env_list = os.environ.get("GCS_IMPORT_PREFIXES", "").strip()
+            if env_list:
+                import_prefixes.extend([_normalized_path(p).rstrip("/") + "/" for p in env_list.split(",") if p.strip()])
+            # Single root prefix
+            root_prefix = os.environ.get("GCS_DATA_PREFIX", "").strip()
+            if root_prefix:
+                root_norm = _normalized_path(root_prefix).rstrip("/")
+                import_prefixes.append(f"{root_norm}/")
+                import_prefixes.append(f"{root_norm}/{symbol_lower}/")
+            # Defaults
+            import_prefixes.append(_normalized_path(os.path.join("render_app", "data", "")))
+            import_prefixes.append(_normalized_path(os.path.join("render_app", "data", symbol_lower, "")))
+            # Dedup
+            seen = set()
+            unique_prefixes = []
+            for p in import_prefixes:
+                if p not in seen:
+                    seen.add(p)
+                    unique_prefixes.append(p)
+            total_downloaded = 0
+            total_skipped = 0
+            for prefix in unique_prefixes:
+                if prefix.rstrip("/").endswith(f"/{symbol_lower}"):
+                    dest = logger.data_folder
+                else:
+                    dest = os.path.join("render_app", "data")
+                d, s = gcs_utils.rsync_csvs_from_gcs(prefix, dest)
+                total_downloaded += d
+                total_skipped += s
+            print(f"☁️ Hydration {symbol}: prefixes={len(unique_prefixes)} downloaded={total_downloaded} skipped={total_skipped}")
+            # Warm JSONs if present in bucket
+            recent_file = os.path.join(logger.data_folder, "recent.json")
+            historical_file = os.path.join(logger.data_folder, "historical.json")
+            gcs_utils.download_if_exists(recent_file, recent_file)
+            gcs_utils.download_if_exists(historical_file, historical_file)
+    except Exception as e:
+        print(f"⚠️ GCS hydration error ({symbol}): {e}")
+    # Local back-compat copy
+    try:
+        copied, skipped = _copy_root_csvs_into_symbol_folder(logger)
+        if copied or skipped:
+            print(f"📁 Copied root CSVs into {symbol} folder: copied={copied} skipped={skipped}")
+    except Exception as e:
+        print(f"⚠️ Local CSV copy error ({symbol}): {e}")
+    # Rebuild JSONs from all CSVs (merge-safe in process_data)
+    try:
+        logger.process_historical_json()
+        logger.process_recent_json()
+    except Exception as e:
+        print(f"⚠️ Initial JSON rebuild error ({symbol}): {e}")
+
+
 def create_app(crypto_symbol):
     """Create Flask app for a specific cryptocurrency"""
     crypto_symbol = crypto_symbol.upper()
@@ -236,6 +327,14 @@ def create_app(crypto_symbol):
     CORS(app)
     
     logger = CryptoLogger(crypto_symbol)
+
+    # New: Hydrate CSVs from GCS and rebuild JSONs on startup (Render-friendly)
+    try:
+        sync_on_start = os.environ.get("GCS_SYNC_ON_START", "true").lower() == "true"
+        if sync_on_start:
+            _hydrate_from_gcs_and_rebuild(logger)
+    except Exception as e:
+        print(f"⚠️ Startup hydration skipped ({crypto_symbol}): {e}")
     
     @app.route("/")
     def home():
