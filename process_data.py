@@ -4,6 +4,7 @@ import json
 from datetime import datetime, timedelta, UTC
 import glob
 from typing import List, Dict, Any  # type: ignore
+import threading
 
 # Optional GCS sync for generated files
 try:
@@ -13,6 +14,22 @@ except Exception:
 
 DATA_FOLDER = "render_app/data"
 EXPECTED_ASSET_PAIR = None  # When set, filter rows to this asset (e.g., ADA-USD)
+
+_PROCESS_JSON_LOCK = threading.Lock()
+
+def process_csv_to_json_atomic(data_folder: str, expected_asset_pair: str | None) -> None:
+    """Thread-safe CSV->JSON generation for a specific folder/asset without global bleed."""
+    global DATA_FOLDER, EXPECTED_ASSET_PAIR
+    with _PROCESS_JSON_LOCK:
+        original_folder = DATA_FOLDER
+        original_asset = EXPECTED_ASSET_PAIR
+        try:
+            DATA_FOLDER = data_folder
+            EXPECTED_ASSET_PAIR = expected_asset_pair
+            process_csv_to_json()
+        finally:
+            DATA_FOLDER = original_folder
+            EXPECTED_ASSET_PAIR = original_asset
 
 def process_csv_to_json():
     """

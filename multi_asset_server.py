@@ -106,20 +106,13 @@ def start_logger_for_symbol(crypto_symbol: str) -> CryptoLogger:
 
     # Rebuild JSONs from all CSVs (merge-safe in process_data)
     try:
-        # Ensure per-asset filtering during initial rebuild
+        # Use atomic processor if available
         import process_data  # type: ignore
-        original_asset = getattr(process_data, 'EXPECTED_ASSET_PAIR', None)
-        process_data.EXPECTED_ASSET_PAIR = logger.config.get('pair')
-        logger.process_historical_json()
-        logger.process_recent_json()
-        # Restore
-        if original_asset is not None:
-            process_data.EXPECTED_ASSET_PAIR = original_asset
+        if hasattr(process_data, 'process_csv_to_json_atomic'):
+            process_data.process_csv_to_json_atomic(logger.data_folder, logger.config.get('pair'))
         else:
-            try:
-                delattr(process_data, 'EXPECTED_ASSET_PAIR')
-            except Exception:
-                process_data.EXPECTED_ASSET_PAIR = None
+            logger.process_historical_json()
+            logger.process_recent_json()
     except Exception as e:
         print(f"⚠️ Initial JSON rebuild error: {e}")
 
