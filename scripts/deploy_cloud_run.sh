@@ -7,6 +7,8 @@ set -euo pipefail
 #   SERVICE_NAME - Cloud Run service name (default: crypto-logger)
 #   REGION - Cloud Run region (default: us-central1)
 #   BUCKET_NAME - GCS bucket name for data (default: ${PROJECT_ID}-crypto-data)
+#   GCS_DATA_PREFIX - Root prefix in bucket containing CSVs (e.g., render_app/data or crypto-logs)
+#   GCS_IMPORT_PREFIXES - Comma-separated prefixes to additionally import from
 
 if [[ -z "${PROJECT_ID:-}" ]]; then
   echo "PROJECT_ID is required" >&2
@@ -32,6 +34,15 @@ IMAGE="gcr.io/${PROJECT_ID}/${SERVICE_NAME}"
 # Build and push image
 gcloud builds submit --project "$PROJECT_ID" --tag "$IMAGE"
 
+# Build env var string
+ENV_VARS="GCP_PROJECT=$PROJECT_ID,GCS_BUCKET=$BUCKET_NAME,GCS_SYNC_ON_START=true"
+if [[ -n "${GCS_DATA_PREFIX:-}" ]]; then
+  ENV_VARS+="\,GCS_DATA_PREFIX=$GCS_DATA_PREFIX"
+fi
+if [[ -n "${GCS_IMPORT_PREFIXES:-}" ]]; then
+  ENV_VARS+="\,GCS_IMPORT_PREFIXES=$GCS_IMPORT_PREFIXES"
+fi
+
 # Deploy to Cloud Run
 gcloud run deploy "$SERVICE_NAME" \
   --project "$PROJECT_ID" \
@@ -39,7 +50,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --image "$IMAGE" \
   --platform managed \
   --allow-unauthenticated \
-  --set-env-vars GCP_PROJECT="$PROJECT_ID",GCS_BUCKET="$BUCKET_NAME",GCS_SYNC_ON_START=true
+  --set-env-vars "$ENV_VARS"
 
 # Output service URL
 SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" --project "$PROJECT_ID" --region "$REGION" --format 'value(status.url)')
@@ -48,5 +59,5 @@ set +x
 echo ""
 echo "Deployed to: $SERVICE_URL"
 echo ""
-echo "Environment configured: GCP_PROJECT=$PROJECT_ID, GCS_BUCKET=$BUCKET_NAME"
+echo "Environment configured: $ENV_VARS"
 echo "Use the service URL + endpoints, e.g. $SERVICE_URL/recent.json or $SERVICE_URL/ADA/recent.json"
