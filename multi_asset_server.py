@@ -9,12 +9,112 @@ from datetime import datetime, UTC
 
 from config import get_available_cryptos, get_crypto_config, DEFAULT_CRYPTO
 from multi_crypto_logger import CryptoLogger
+import glob
+import shutil
 
 # Registry of running loggers per symbol
 symbol_to_logger = {}
 
 app = Flask(__name__)
 CORS(app)
+
+
+def _normalized(s: str) -> str:
+    return s.replace("\\", "/").strip()
+
+
+def _copy_root_csvs_to_symbol(logger: CryptoLogger) -> tuple[int, int]:
+    """Copy any root-level CSVs (render_app/data/*.csv) into the symbol folder if missing."""
+    root_dir = os.path.join("render_app", "data")
+    symbol_dir = logger.data_folder
+    if os.path.abspath(root_dir) == os.path.abspath(symbol_dir):
+        return (0, 0)
+    os.makedirs(symbol_dir, exist_ok=True)
+    copied = 0
+    skipped = 0
+    for src in glob.glob(os.path.join(root_dir, "*.csv")):
+        dst = os.path.join(symbol_dir, os.path.basename(src))
+        if os.path.exists(dst) and os.path.getsize(dst) > 0:
+            skipped += 1
+            continue
+        try:
+            shutil.copy2(src, dst)
+            copied += 1
+        except Exception:
+            skipped += 1
+    return (copied, skipped)
+
+
+def _hydrate_csvs_and_json(logger: CryptoLogger):
+    """Best-effort: pull all CSVs from GCS for this symbol and preserve existing JSON files."""
+    try:
+        import gcs_utils  # type: ignore
+        symbol = logger.crypto_symbol
+        sym_lower = symbol.lower()
+
+        # Build list of import prefixes to search in GCS
+        import_prefixes: list[str] = []
+
+        # 1) Explicit list from env: comma-separated prefixes
+        env_list = os.environ.get("GCS_IMPORT_PREFIXES", "").strip()
+        if env_list:
+            import_prefixes.extend([_normalized(p).rstrip("/") + "/" for p in env_list.split(",") if p.strip()])
+
+        # 2) Single root prefix from env (e.g., "data" or "crypto-logs")
+        root_env = os.environ.get("GCS_DATA_PREFIX", "").strip()
+        if root_env:
+            root_norm = _normalized(root_env).rstrip("/")
+            import_prefixes.append(f"{root_norm}/")
+            import_prefixes.append(f"{root_norm}/{sym_lower}/")
+
+        # 3) Defaults based on our local layout
+        import_prefixes.append(_normalized(os.path.join("render_app", "data", "")))
+        import_prefixes.append(_normalized(os.path.join("render_app", "data", sym_lower, "")))
+
+        # Deduplicate while preserving order
+        seen = set()
+        unique_prefixes: list[str] = []
+        for p in import_prefixes:
+            if p not in seen:
+                seen.add(p)
+                unique_prefixes.append(p)
+
+        total_downloaded = 0
+        total_skipped = 0
+        for prefix in unique_prefixes:
+            # Decide destination: symbol folder if prefix ends with /<symbol>/, else root data
+            if prefix.rstrip("/").endswith(f"/{sym_lower}"):
+                dest = logger.data_folder
+            else:
+                dest = os.path.join("render_app", "data")
+            downloaded, skipped = gcs_utils.rsync_csvs_from_gcs(prefix, dest)
+            total_downloaded += downloaded
+            total_skipped += skipped
+
+        print(
+            f"☁️ GCS CSV hydration for {symbol}: prefixes={len(unique_prefixes)} downloaded={total_downloaded} skipped={total_skipped}"
+        )
+    except Exception as e:
+        print(f"⚠️ CSV hydration error: {e}")
+    
+    # Local back-compat: copy root CSVs into symbol folder if missing
+    try:
+        copied, skipped = _copy_root_csvs_to_symbol(logger)
+        if copied or skipped:
+            print(f"📁 Root CSVs -> {logger.crypto_symbol} folder: copied={copied}, skipped={skipped}")
+    except Exception as e:
+        print(f"⚠️ Local CSV copy error: {e}")
+    
+    # Preserve existing JSONs by merging if new data exists
+    try:
+        _recent_path = os.path.join(logger.data_folder, "recent.json")
+        _hist_path = os.path.join(logger.data_folder, "historical.json")
+        if os.path.exists(_recent_path):
+            print(f"🔒 Preserving existing recent.json for {logger.crypto_symbol}")
+        if os.path.exists(_hist_path):
+            print(f"🔒 Preserving existing historical.json for {logger.crypto_symbol}")
+    except Exception as e:
+        print(f"⚠️ JSON preservation check error: {e}")
 
 
 def start_logger_for_symbol(crypto_symbol: str) -> CryptoLogger:
@@ -29,17 +129,19 @@ def start_logger_for_symbol(crypto_symbol: str) -> CryptoLogger:
         import gcs_utils  # type: ignore
         sync_on_start = os.environ.get("GCS_SYNC_ON_START", "true").lower() == "true"
         if gcs_utils.is_gcs_enabled() and sync_on_start:
+            # Hydrate CSVs and any prior JSONs
+            _hydrate_csvs_and_json(logger)
             gcs_utils.download_if_exists(recent_file, recent_file)
             gcs_utils.download_if_exists(historical_file, historical_file)
     except Exception:
         pass
 
-    if not os.path.exists(recent_file):
-        print(f"🔄 Creating initial recent.json for {crypto_symbol}")
-        logger.process_recent_json()
-    if not os.path.exists(historical_file):
-        print(f"🔄 Creating initial historical.json for {crypto_symbol}")
+    # Always rebuild JSON from available CSVs on startup using merge-safe generators
+    try:
         logger.process_historical_json()
+        logger.process_recent_json()
+    except Exception as e:
+        print(f"⚠️ Initial JSON rebuild error: {e}")
 
     # Start continuous logging with timed JSON generation
     t = threading.Thread(target=logger.log_data_continuous, daemon=True)
