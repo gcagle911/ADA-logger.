@@ -74,25 +74,31 @@ def process_csv_to_json():
         print(f"❌ Error in process_csv_to_json: {e}")
         raise
 
-def _merge_existing_json(output_path: str, new_records: List[Dict[str, Any]], key: str = "time") -> List[Dict[str, Any]]:
-	"""Merge new_records with existing JSON if present, de-duplicating by key (default: time)."""
-	existing: List[Dict[str, Any]] = []
-	if os.path.exists(output_path):
-		try:
-			with open(output_path, 'r') as f:
-				existing = json.load(f)
-		except Exception:
-			existing = []
-	# Build dict by key to dedupe, preferring newer records
-	merged_map = {rec.get(key): rec for rec in existing if key in rec}
-	for rec in new_records:
-		if key in rec:
-			merged_map[rec[key]] = rec
-	# Return sorted by time if key is time-like
-	try:
-		return sorted(merged_map.values(), key=lambda r: r.get(key, ""))
-	except Exception:
-		return list(merged_map.values())
+def _load_json_list(path: str) -> List[Dict[str, Any]]:
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path, 'r') as f:
+            data = json.load(f)
+            if isinstance(data, list):
+                return data
+            return []
+    except Exception:
+        return []
+
+
+def _merge_by_key(lists: List[List[Dict[str, Any]]], key: str = "time") -> List[Dict[str, Any]]:
+    merged: Dict[str, Dict[str, Any]] = {}
+    for records in lists:
+        for rec in records:
+            k = rec.get(key)
+            if k is None:
+                continue
+            merged[k] = rec
+    try:
+        return sorted(merged.values(), key=lambda r: r.get(key, ""))
+    except Exception:
+        return list(merged.values())
 
 def _generate_historical_json(df):
     """Generate complete historical data JSON - RESAMPLED TO 1-MINUTE INTERVALS"""
@@ -126,7 +132,16 @@ def _generate_historical_json(df):
         
         output_path = os.path.join(DATA_FOLDER, "historical.json")
         # Merge with existing historical to avoid overwriting
-        chart_data = _merge_existing_json(output_path, chart_data, key="time")
+        base_existing = _load_json_list(output_path)
+        # Also merge with root-level historical.json if DATA_FOLDER is a per-symbol directory
+        alt_existing: List[Dict[str, Any]] = []
+        try:
+            if os.path.normpath(DATA_FOLDER) != os.path.normpath(os.path.join("render_app", "data")):
+                alt_path = os.path.join("render_app", "data", "historical.json")
+                alt_existing = _load_json_list(alt_path)
+        except Exception:
+            alt_existing = []
+        chart_data = _merge_by_key([base_existing, alt_existing, chart_data], key="time")
         with open(output_path, 'w') as f:
             json.dump(chart_data, f, indent=2)
         
@@ -179,7 +194,15 @@ def _generate_recent_json(df):
         
         output_path = os.path.join(DATA_FOLDER, "recent.json")
         # Merge with existing recent to avoid overwriting but keep 24h window
-        merged = _merge_existing_json(output_path, chart_data, key="time")
+        base_existing = _load_json_list(output_path)
+        alt_existing: List[Dict[str, Any]] = []
+        try:
+            if os.path.normpath(DATA_FOLDER) != os.path.normpath(os.path.join("render_app", "data")):
+                alt_path = os.path.join("render_app", "data", "recent.json")
+                alt_existing = _load_json_list(alt_path)
+        except Exception:
+            alt_existing = []
+        merged = _merge_by_key([base_existing, alt_existing, chart_data], key="time")
         # Enforce 24h window: filter by now-24h
         now = datetime.now(UTC)
         cutoff_time = now - timedelta(hours=24)

@@ -9,6 +9,8 @@ from datetime import datetime, UTC
 
 from config import get_available_cryptos, get_crypto_config, DEFAULT_CRYPTO
 from multi_crypto_logger import CryptoLogger
+import glob
+import shutil
 
 # Registry of running loggers per symbol
 symbol_to_logger = {}
@@ -17,27 +19,61 @@ app = Flask(__name__)
 CORS(app)
 
 
+def _copy_root_csvs_to_symbol(logger: CryptoLogger) -> tuple[int, int]:
+    """Copy any root-level CSVs (render_app/data/*.csv) into the symbol folder if missing."""
+    root_dir = os.path.join("render_app", "data")
+    symbol_dir = logger.data_folder
+    if os.path.abspath(root_dir) == os.path.abspath(symbol_dir):
+        return (0, 0)
+    os.makedirs(symbol_dir, exist_ok=True)
+    copied = 0
+    skipped = 0
+    for src in glob.glob(os.path.join(root_dir, "*.csv")):
+        dst = os.path.join(symbol_dir, os.path.basename(src))
+        if os.path.exists(dst) and os.path.getsize(dst) > 0:
+            skipped += 1
+            continue
+        try:
+            shutil.copy2(src, dst)
+            copied += 1
+        except Exception:
+            skipped += 1
+    return (copied, skipped)
+
+
 def _hydrate_csvs_and_json(logger: CryptoLogger):
     """Best-effort: pull all CSVs from GCS for this symbol and preserve existing JSON files."""
     try:
         import gcs_utils  # type: ignore
         symbol = logger.crypto_symbol
         if gcs_utils.is_gcs_enabled():
-            # CSV prefix in bucket mirrors local folder structure
+            # Primary: symbol-specific prefix
             csv_prefix = os.path.join(logger.data_folder, "").replace("\\", "/")
-            downloaded, skipped = gcs_utils.rsync_csvs_from_gcs(csv_prefix, logger.data_folder)
-            print(f"☁️ GCS CSV hydration for {symbol}: downloaded={downloaded}, skipped={skipped}")
+            downloaded_sym, skipped_sym = gcs_utils.rsync_csvs_from_gcs(csv_prefix, logger.data_folder)
+            # Back-compat: also pull any root-level CSVs
+            root_prefix = os.path.join("render_app", "data", "").replace("\\", "/")
+            downloaded_root, skipped_root = gcs_utils.rsync_csvs_from_gcs(root_prefix, os.path.join("render_app", "data"))
+            print(
+                f"☁️ GCS CSV hydration for {symbol}: symbol(downloaded={downloaded_sym}, skipped={skipped_sym}) "
+                f"root(downloaded={downloaded_root}, skipped={skipped_root})"
+            )
         else:
             print("☁️ GCS not enabled; skipping CSV hydration")
     except Exception as e:
         print(f"⚠️ CSV hydration error: {e}")
     
+    # Local back-compat: copy root CSVs into symbol folder if missing
+    try:
+        copied, skipped = _copy_root_csvs_to_symbol(logger)
+        if copied or skipped:
+            print(f"📁 Root CSVs -> {logger.crypto_symbol} folder: copied={copied}, skipped={skipped}")
+    except Exception as e:
+        print(f"⚠️ Local CSV copy error: {e}")
+    
     # Preserve existing JSONs by merging if new data exists
     try:
         _recent_path = os.path.join(logger.data_folder, "recent.json")
         _hist_path = os.path.join(logger.data_folder, "historical.json")
-        # If files exist, keep them; regeneration will extend based on CSVs
-        # If missing, they will be created by start_logger_for_symbol
         if os.path.exists(_recent_path):
             print(f"🔒 Preserving existing recent.json for {logger.crypto_symbol}")
         if os.path.exists(_hist_path):
@@ -58,20 +94,19 @@ def start_logger_for_symbol(crypto_symbol: str) -> CryptoLogger:
         import gcs_utils  # type: ignore
         sync_on_start = os.environ.get("GCS_SYNC_ON_START", "true").lower() == "true"
         if gcs_utils.is_gcs_enabled() and sync_on_start:
-            # NEW: Hydrate CSVs for full rebuild potential
+            # Hydrate CSVs and any prior JSONs
             _hydrate_csvs_and_json(logger)
-            # Also hydrate existing JSONs if present in bucket
             gcs_utils.download_if_exists(recent_file, recent_file)
             gcs_utils.download_if_exists(historical_file, historical_file)
     except Exception:
         pass
 
-    if not os.path.exists(recent_file):
-        print(f"🔄 Creating initial recent.json for {crypto_symbol}")
-        logger.process_recent_json()
-    if not os.path.exists(historical_file):
-        print(f"🔄 Creating initial historical.json for {crypto_symbol}")
+    # Always rebuild JSON from available CSVs on startup using merge-safe generators
+    try:
         logger.process_historical_json()
+        logger.process_recent_json()
+    except Exception as e:
+        print(f"⚠️ Initial JSON rebuild error: {e}")
 
     # Start continuous logging with timed JSON generation
     t = threading.Thread(target=logger.log_data_continuous, daemon=True)
