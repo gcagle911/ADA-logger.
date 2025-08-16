@@ -12,6 +12,7 @@ except Exception:
     gcs_utils = None
 
 DATA_FOLDER = "render_app/data"
+EXPECTED_ASSET_PAIR = None  # When set, filter rows to this asset (e.g., ADA-USD)
 
 def process_csv_to_json():
     """
@@ -43,6 +44,15 @@ def process_csv_to_json():
             try:
                 df = pd.read_csv(csv_file)
                 if not df.empty:
+                    # Filter to expected asset if configured and column is present
+                    try:
+                        if EXPECTED_ASSET_PAIR and 'asset' in df.columns:
+                            df = df[df['asset'] == EXPECTED_ASSET_PAIR]
+                            if df.empty:
+                                print(f"⏭️  Skip {csv_file}: no rows for {EXPECTED_ASSET_PAIR}")
+                                continue
+                    except Exception:
+                        pass
                     # Ensure timestamp is datetime with proper ISO8601 parsing
                     df['timestamp'] = pd.to_datetime(df['timestamp'], format='ISO8601', utc=True)
                     all_dataframes.append(df)
@@ -131,17 +141,9 @@ def _generate_historical_json(df):
             })
         
         output_path = os.path.join(DATA_FOLDER, "historical.json")
-        # Merge with existing historical to avoid overwriting
+        # Merge with existing historical to avoid overwriting (same folder only)
         base_existing = _load_json_list(output_path)
-        # Also merge with root-level historical.json if DATA_FOLDER is a per-symbol directory
-        alt_existing: List[Dict[str, Any]] = []
-        try:
-            if os.path.normpath(DATA_FOLDER) != os.path.normpath(os.path.join("render_app", "data")):
-                alt_path = os.path.join("render_app", "data", "historical.json")
-                alt_existing = _load_json_list(alt_path)
-        except Exception:
-            alt_existing = []
-        chart_data = _merge_by_key([base_existing, alt_existing, chart_data], key="time")
+        chart_data = _merge_by_key([base_existing, chart_data], key="time")
         with open(output_path, 'w') as f:
             json.dump(chart_data, f, indent=2)
         
@@ -193,16 +195,9 @@ def _generate_recent_json(df):
             })
         
         output_path = os.path.join(DATA_FOLDER, "recent.json")
-        # Merge with existing recent to avoid overwriting but keep 24h window
+        # Merge with existing recent to avoid overwriting but keep 24h window (same folder only)
         base_existing = _load_json_list(output_path)
-        alt_existing: List[Dict[str, Any]] = []
-        try:
-            if os.path.normpath(DATA_FOLDER) != os.path.normpath(os.path.join("render_app", "data")):
-                alt_path = os.path.join("render_app", "data", "recent.json")
-                alt_existing = _load_json_list(alt_path)
-        except Exception:
-            alt_existing = []
-        merged = _merge_by_key([base_existing, alt_existing, chart_data], key="time")
+        merged = _merge_by_key([base_existing, chart_data], key="time")
         # Enforce 24h window: filter by now-24h
         now = datetime.now(UTC)
         cutoff_time = now - timedelta(hours=24)
@@ -261,7 +256,8 @@ def _generate_daily_json_files(df):
                 filename = f"output_{date}.json"
                 output_path = os.path.join(DATA_FOLDER, filename)
                 # Merge with existing daily files to avoid overwriting
-                chart_data = _merge_existing_json(output_path, chart_data, key="time")
+                existing_daily = _load_json_list(output_path)
+                chart_data = _merge_by_key([existing_daily, chart_data], key="time")
                 with open(output_path, 'w') as f:
                     json.dump(chart_data, f, indent=2)
                 
@@ -288,8 +284,8 @@ def _generate_metadata(df, csv_files):
                 "end": df['timestamp'].max().isoformat()
             },
             "csv_files_processed": len(csv_files),
-            "assets": ["ADA-USD"],
-            "exchanges": ["Coinbase"],
+            "assets": sorted(list(set(df['asset'].dropna().unique()))) if 'asset' in df.columns else ([EXPECTED_ASSET_PAIR] if EXPECTED_ASSET_PAIR else []),
+            "exchanges": list(sorted(set(df['exchange'].dropna().unique()))) if 'exchange' in df.columns else [],
             "data_points": {
                 "price": "Mid price between bid/ask",
                 "bid": "Best bid price",

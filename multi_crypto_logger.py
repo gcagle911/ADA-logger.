@@ -149,17 +149,27 @@ class CryptoLogger:
             from process_data import process_csv_to_json
             import process_data
             
-            # Temporarily set DATA_FOLDER for this crypto's processing
+            # Temporarily set DATA_FOLDER and EXPECTED_ASSET_PAIR for this crypto's processing
             original_folder = getattr(process_data, 'DATA_FOLDER', None)
+            original_asset = getattr(process_data, 'EXPECTED_ASSET_PAIR', None)
             process_data.DATA_FOLDER = self.data_folder
+            process_data.EXPECTED_ASSET_PAIR = self.config.get('pair')
             
             # Process only recent data
             process_csv_to_json()
             print(f"📊 Updated recent.json for {self.crypto_symbol}")
             
-            # Restore original folder
-            if original_folder:
+            # Restore original globals
+            if original_folder is not None:
                 process_data.DATA_FOLDER = original_folder
+            if original_asset is not None:
+                process_data.EXPECTED_ASSET_PAIR = original_asset
+            else:
+                # Clear if it was previously unset
+                try:
+                    delattr(process_data, 'EXPECTED_ASSET_PAIR')
+                except Exception:
+                    process_data.EXPECTED_ASSET_PAIR = None
                 
         except Exception as e:
             print(f"❌ Error updating recent JSON for {self.crypto_symbol}: {e}")
@@ -174,17 +184,26 @@ class CryptoLogger:
             from process_data import process_csv_to_json
             import process_data
             
-            # Temporarily set DATA_FOLDER for this crypto's processing
+            # Temporarily set DATA_FOLDER and EXPECTED_ASSET_PAIR for this crypto's processing
             original_folder = getattr(process_data, 'DATA_FOLDER', None)
+            original_asset = getattr(process_data, 'EXPECTED_ASSET_PAIR', None)
             process_data.DATA_FOLDER = self.data_folder
+            process_data.EXPECTED_ASSET_PAIR = self.config.get('pair')
             
             # Process full historical data  
             process_csv_to_json()
             print(f"🏛️ Updated historical.json for {self.crypto_symbol}")
             
-            # Restore original folder
-            if original_folder:
+            # Restore original globals
+            if original_folder is not None:
                 process_data.DATA_FOLDER = original_folder
+            if original_asset is not None:
+                process_data.EXPECTED_ASSET_PAIR = original_asset
+            else:
+                try:
+                    delattr(process_data, 'EXPECTED_ASSET_PAIR')
+                except Exception:
+                    process_data.EXPECTED_ASSET_PAIR = None
                 
         except Exception as e:
             print(f"❌ Error updating historical JSON for {self.crypto_symbol}: {e}")
