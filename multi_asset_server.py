@@ -23,28 +23,6 @@ def _normalized(s: str) -> str:
     return s.replace("\\", "/").strip()
 
 
-def _copy_root_csvs_to_symbol(logger: CryptoLogger) -> tuple[int, int]:
-    """Copy any root-level CSVs (render_app/data/*.csv) into the symbol folder if missing."""
-    root_dir = os.path.join("render_app", "data")
-    symbol_dir = logger.data_folder
-    if os.path.abspath(root_dir) == os.path.abspath(symbol_dir):
-        return (0, 0)
-    os.makedirs(symbol_dir, exist_ok=True)
-    copied = 0
-    skipped = 0
-    for src in glob.glob(os.path.join(root_dir, "*.csv")):
-        dst = os.path.join(symbol_dir, os.path.basename(src))
-        if os.path.exists(dst) and os.path.getsize(dst) > 0:
-            skipped += 1
-            continue
-        try:
-            shutil.copy2(src, dst)
-            copied += 1
-        except Exception:
-            skipped += 1
-    return (copied, skipped)
-
-
 def _hydrate_csvs_and_json(logger: CryptoLogger):
     """Best-effort: pull all CSVs from GCS for this symbol and preserve existing JSON files."""
     try:
@@ -52,23 +30,24 @@ def _hydrate_csvs_and_json(logger: CryptoLogger):
         symbol = logger.crypto_symbol
         sym_lower = symbol.lower()
 
-        # Build list of import prefixes to search in GCS
+        # Build list of import prefixes to search in GCS, but only symbol-specific
         import_prefixes: list[str] = []
 
-        # 1) Explicit list from env: comma-separated prefixes
+        # 1) Explicit list from env: comma-separated prefixes (we will only use those ending with /<symbol>/)
         env_list = os.environ.get("GCS_IMPORT_PREFIXES", "").strip()
         if env_list:
-            import_prefixes.extend([_normalized(p).rstrip("/") + "/" for p in env_list.split(",") if p.strip()])
+            for p in env_list.split(","):
+                p = _normalized(p)
+                if p.rstrip("/").endswith(f"/{sym_lower}"):
+                    import_prefixes.append(p.rstrip("/") + "/")
 
-        # 2) Single root prefix from env (e.g., "data" or "crypto-logs")
+        # 2) Single root prefix from env (e.g., "data" or "crypto-logs") -> append symbol-specific only
         root_env = os.environ.get("GCS_DATA_PREFIX", "").strip()
         if root_env:
             root_norm = _normalized(root_env).rstrip("/")
-            import_prefixes.append(f"{root_norm}/")
             import_prefixes.append(f"{root_norm}/{sym_lower}/")
 
-        # 3) Defaults based on our local layout
-        import_prefixes.append(_normalized(os.path.join("render_app", "data", "")))
+        # 3) Default symbol-specific based on our local layout
         import_prefixes.append(_normalized(os.path.join("render_app", "data", sym_lower, "")))
 
         # Deduplicate while preserving order
@@ -82,11 +61,8 @@ def _hydrate_csvs_and_json(logger: CryptoLogger):
         total_downloaded = 0
         total_skipped = 0
         for prefix in unique_prefixes:
-            # Decide destination: symbol folder if prefix ends with /<symbol>/, else root data
-            if prefix.rstrip("/").endswith(f"/{sym_lower}"):
-                dest = logger.data_folder
-            else:
-                dest = os.path.join("render_app", "data")
+            # Always download into the symbol folder
+            dest = logger.data_folder
             downloaded, skipped = gcs_utils.rsync_csvs_from_gcs(prefix, dest)
             total_downloaded += downloaded
             total_skipped += skipped
@@ -96,14 +72,6 @@ def _hydrate_csvs_and_json(logger: CryptoLogger):
         )
     except Exception as e:
         print(f"⚠️ CSV hydration error: {e}")
-    
-    # Local back-compat: copy root CSVs into symbol folder if missing
-    try:
-        copied, skipped = _copy_root_csvs_to_symbol(logger)
-        if copied or skipped:
-            print(f"📁 Root CSVs -> {logger.crypto_symbol} folder: copied={copied}, skipped={skipped}")
-    except Exception as e:
-        print(f"⚠️ Local CSV copy error: {e}")
     
     # Preserve existing JSONs by merging if new data exists
     try:

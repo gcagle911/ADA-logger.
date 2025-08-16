@@ -141,9 +141,7 @@ def _generate_historical_json(df):
             })
         
         output_path = os.path.join(DATA_FOLDER, "historical.json")
-        # Merge with existing historical to avoid overwriting (same folder only)
-        base_existing = _load_json_list(output_path)
-        chart_data = _merge_by_key([base_existing, chart_data], key="time")
+        # Build strictly from CSVs to avoid cross-contamination
         with open(output_path, 'w') as f:
             json.dump(chart_data, f, indent=2)
         
@@ -195,9 +193,8 @@ def _generate_recent_json(df):
             })
         
         output_path = os.path.join(DATA_FOLDER, "recent.json")
-        # Merge with existing recent to avoid overwriting but keep 24h window (same folder only)
-        base_existing = _load_json_list(output_path)
-        merged = _merge_by_key([base_existing, chart_data], key="time")
+        # Build strictly from CSVs, then enforce 24h window
+        merged = chart_data
         # Enforce 24h window: filter by now-24h
         now = datetime.now(UTC)
         cutoff_time = now - timedelta(hours=24)
@@ -255,9 +252,7 @@ def _generate_daily_json_files(df):
             if chart_data:
                 filename = f"output_{date}.json"
                 output_path = os.path.join(DATA_FOLDER, filename)
-                # Merge with existing daily files to avoid overwriting
-                existing_daily = _load_json_list(output_path)
-                chart_data = _merge_by_key([existing_daily, chart_data], key="time")
+                # Build strictly from CSVs for daily files
                 with open(output_path, 'w') as f:
                     json.dump(chart_data, f, indent=2)
                 
