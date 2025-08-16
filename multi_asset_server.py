@@ -19,6 +19,10 @@ app = Flask(__name__)
 CORS(app)
 
 
+def _normalized(s: str) -> str:
+    return s.replace("\\", "/").strip()
+
+
 def _copy_root_csvs_to_symbol(logger: CryptoLogger) -> tuple[int, int]:
     """Copy any root-level CSVs (render_app/data/*.csv) into the symbol folder if missing."""
     root_dir = os.path.join("render_app", "data")
@@ -46,19 +50,50 @@ def _hydrate_csvs_and_json(logger: CryptoLogger):
     try:
         import gcs_utils  # type: ignore
         symbol = logger.crypto_symbol
-        if gcs_utils.is_gcs_enabled():
-            # Primary: symbol-specific prefix
-            csv_prefix = os.path.join(logger.data_folder, "").replace("\\", "/")
-            downloaded_sym, skipped_sym = gcs_utils.rsync_csvs_from_gcs(csv_prefix, logger.data_folder)
-            # Back-compat: also pull any root-level CSVs
-            root_prefix = os.path.join("render_app", "data", "").replace("\\", "/")
-            downloaded_root, skipped_root = gcs_utils.rsync_csvs_from_gcs(root_prefix, os.path.join("render_app", "data"))
-            print(
-                f"☁️ GCS CSV hydration for {symbol}: symbol(downloaded={downloaded_sym}, skipped={skipped_sym}) "
-                f"root(downloaded={downloaded_root}, skipped={skipped_root})"
-            )
-        else:
-            print("☁️ GCS not enabled; skipping CSV hydration")
+        sym_lower = symbol.lower()
+
+        # Build list of import prefixes to search in GCS
+        import_prefixes: list[str] = []
+
+        # 1) Explicit list from env: comma-separated prefixes
+        env_list = os.environ.get("GCS_IMPORT_PREFIXES", "").strip()
+        if env_list:
+            import_prefixes.extend([_normalized(p).rstrip("/") + "/" for p in env_list.split(",") if p.strip()])
+
+        # 2) Single root prefix from env (e.g., "data" or "crypto-logs")
+        root_env = os.environ.get("GCS_DATA_PREFIX", "").strip()
+        if root_env:
+            root_norm = _normalized(root_env).rstrip("/")
+            import_prefixes.append(f"{root_norm}/")
+            import_prefixes.append(f"{root_norm}/{sym_lower}/")
+
+        # 3) Defaults based on our local layout
+        import_prefixes.append(_normalized(os.path.join("render_app", "data", "")))
+        import_prefixes.append(_normalized(os.path.join("render_app", "data", sym_lower, "")))
+
+        # Deduplicate while preserving order
+        seen = set()
+        unique_prefixes: list[str] = []
+        for p in import_prefixes:
+            if p not in seen:
+                seen.add(p)
+                unique_prefixes.append(p)
+
+        total_downloaded = 0
+        total_skipped = 0
+        for prefix in unique_prefixes:
+            # Decide destination: symbol folder if prefix ends with /<symbol>/, else root data
+            if prefix.rstrip("/").endswith(f"/{sym_lower}"):
+                dest = logger.data_folder
+            else:
+                dest = os.path.join("render_app", "data")
+            downloaded, skipped = gcs_utils.rsync_csvs_from_gcs(prefix, dest)
+            total_downloaded += downloaded
+            total_skipped += skipped
+
+        print(
+            f"☁️ GCS CSV hydration for {symbol}: prefixes={len(unique_prefixes)} downloaded={total_downloaded} skipped={total_skipped}"
+        )
     except Exception as e:
         print(f"⚠️ CSV hydration error: {e}")
     
